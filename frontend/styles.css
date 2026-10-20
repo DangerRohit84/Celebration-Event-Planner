@@ -1,0 +1,16 @@
+﻿/* Accessible baseline: AA contrast, focus-visible, 44px targets, reduced motion. */
+:root { --fg: #1a1a1a; --bg: #ffffff; --accent: #1f4e79; }
+* { box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: var(--fg); background: var(--bg); margin: 0; }
+.skip-link { position: absolute; left: -9999px; top: 0; background: var(--accent); color: #fff; padding: 8px 12px; z-index: 100; }
+.skip-link:focus { left: 0; }
+header, main, footer { max-width: 960px; margin: 0 auto; padding: 16px; }
+label { display: block; margin-top: 8px; font-weight: 600; }
+input, select, button { min-height: 44px; padding: 8px; font-size: 16px; }
+button { background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #ffbf47; outline-offset: 2px; }
+.disclaimer { font-size: 13px; color: #444; }
+.hint { font-size: 12px; color: #555; }
+#errors { color: #b00020; font-weight: 600; min-height: 20px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+/* AA contrast 4.5:1 documented */
