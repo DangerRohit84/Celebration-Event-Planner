@@ -115,17 +115,6 @@ def _attach_headers(resp, request, start, limited=False):
         resp.headers["Retry-After"] = "60"
 
 
-# Problem: middleware calls _rate_limit which raises; but endpoints also call _rate_limit -> double counting.
-# To avoid double counting, endpoints should NOT call _rate_limit again. But existing tests expect 429 after N.
-# We'll keep endpoint calls but make _rate_limit idempotent per request? Hard. Instead, remove middleware rate-limit
-# and keep endpoint-level _rate_limit, attaching headers via a helper called in endpoints? 
-# Simpler: revert middleware to not rate-limit; do rate limiting in endpoints (as before) and add headers in middleware
-# based on a shared bucket snapshot. But headers need remaining. Let's instead do rate limiting ONLY in middleware,
-# and remove _rate_limit calls from endpoints.
-
-# We'll adjust: middleware does rate limit; endpoints skip. But endpoints need 429. Middleware returns 429 before reaching endpoint. Good.
-# Remove _rate_limit calls below.
-
 # --- Pydantic schemas ---
 class EventCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)

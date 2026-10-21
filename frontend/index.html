@@ -4,65 +4,102 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Plan weddings, birthdays, and community events: budgets, timelines, vendors, and personalized ideas." />
-  <title>Celebration & Event Planner</title>
+  <title>Celebration &amp; Event Planner</title>
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
-  <header role="banner">
-    <h1>Celebration &amp; Event Planner</h1>
+  <header role="banner" class="site-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">✦</span>
+      <div>
+        <h1>Celebration &amp; Event Planner</h1>
+        <p class="tagline">Budgets, timelines, vendors, and ideas — in one calm place.</p>
+      </div>
+    </div>
     <p class="disclaimer">General information only - not professional advice. Verify with vendors and qualified planners. Uses fake/redacted sample data.</p>
   </header>
   <main id="main" role="main" tabindex="-1">
-    <section aria-labelledby="create-heading">
-      <h2 id="create-heading">Create Event</h2>
-      <form id="create-form">
-        <label for="name">Event name</label>
-        <input id="name" name="name" type="text" required aria-required="true" aria-describedby="nameHint" />
-        <span id="nameHint" class="hint">Required, max 200 chars.</span>
-
-        <label for="event_type">Type</label>
-        <select id="event_type" name="event_type">
-          <option value="wedding">Wedding</option>
-          <option value="birthday">Birthday</option>
-          <option value="community">Community</option>
-          <option value="corporate">Corporate</option>
-          <option value="other">Other</option>
-        </select>
-
-        <label for="event_date">Date</label>
-        <input id="event_date" name="event_date" type="date" required aria-required="true" />
-
-        <label for="guest_count">Guests</label>
-        <input id="guest_count" name="guest_count" type="number" min="0" />
-
-        <label for="budget_total">Budget</label>
-        <input id="budget_total" name="budget_total" type="number" min="0" step="0.01" />
-
-        <label for="theme">Theme</label>
-        <input id="theme" name="theme" type="text" />
-
-        <label for="location">Location</label>
-        <input id="location" name="location" type="text" />
-
-        <button type="submit">Create</button>
-        <button type="button" id="exportBtn">Export Plan</button>
-      </form>
-      <div id="status" role="status" aria-live="polite" tabindex="0"></div>
-      <div id="errors" role="alert" aria-live="assertive"></div>
+    <section class="hero" aria-labelledby="hero-heading">
+      <h2 id="hero-heading" class="hero-title">Plan something worth celebrating.</h2>
+      <p class="hero-sub">Create an event, set a budget, and ask for grounded ideas from our vetted corpus.</p>
     </section>
 
-    <section aria-labelledby="ideas-heading">
-      <h2 id="ideas-heading">Personalized Ideas</h2>
-      <label for="q">Question</label>
-      <input id="q" type="text" aria-describedby="askHint" />
-      <span id="askHint" class="hint">Ask for ideas grounded in vetted corpus.</span>
-      <button type="button" id="askBtn">Ask</button>
-      <div id="answer" tabindex="-1"></div>
-      <div id="citations" aria-live="polite"></div>
+    <section class="card" aria-labelledby="create-heading">
+      <div class="card-head">
+        <h2 id="create-heading">Create Event</h2>
+        <p class="card-sub">Tell us the basics and we'll scaffold a plan.</p>
+      </div>
+      <form id="create-form" class="form-grid">
+        <div class="field">
+          <label for="name">Event name</label>
+          <input id="name" name="name" type="text" required aria-required="true" aria-describedby="nameHint" autocomplete="name" placeholder="e.g. Maya &amp; Jordan's wedding" />
+          <span id="nameHint" class="hint">Required, max 200 chars.</span>
+        </div>
+
+        <div class="field">
+          <label for="event_type">Type</label>
+          <select id="event_type" name="event_type">
+            <option value="wedding">Wedding</option>
+            <option value="birthday">Birthday</option>
+            <option value="community">Community</option>
+            <option value="corporate">Corporate</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="event_date">Date</label>
+          <input id="event_date" name="event_date" type="date" required aria-required="true" autocomplete="bday" />
+        </div>
+
+        <div class="field">
+          <label for="guest_count">Guests</label>
+          <input id="guest_count" name="guest_count" type="number" min="0" placeholder="0" autocomplete="off" />
+        </div>
+
+        <div class="field">
+          <label for="budget_total">Budget</label>
+          <input id="budget_total" name="budget_total" type="number" min="0" step="0.01" placeholder="0.00" autocomplete="off" />
+        </div>
+
+        <div class="field">
+          <label for="theme">Theme</label>
+          <input id="theme" name="theme" type="text" placeholder="e.g. garden, rustic" autocomplete="off" />
+        </div>
+
+        <div class="field field-wide">
+          <label for="location">Location</label>
+          <input id="location" name="location" type="text" placeholder="City or venue" autocomplete="address-level2" />
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn btn-primary">Create</button>
+          <button type="button" id="exportBtn" class="btn btn-ghost">Export Plan</button>
+        </div>
+      </form>
+      <div id="status" role="status" aria-live="polite" tabindex="0" class="status"></div>
+      <div id="errors" role="alert" aria-live="assertive" class="errors"></div>
+    </section>
+
+    <section class="card" aria-labelledby="ideas-heading">
+      <div class="card-head">
+        <h2 id="ideas-heading">Personalized Ideas</h2>
+        <p class="card-sub">Ask for ideas grounded in our vetted corpus.</p>
+      </div>
+      <div class="ask-row">
+        <div class="field field-grow">
+          <label for="q">Question</label>
+          <input id="q" type="text" aria-describedby="askHint" autocomplete="off" placeholder="e.g. outdoor ceremony ideas" />
+          <span id="askHint" class="hint">Ask for ideas grounded in vetted corpus.</span>
+        </div>
+        <button type="button" id="askBtn" class="btn btn-primary">Ask</button>
+      </div>
+      <div id="answer" tabindex="-1" class="answer"></div>
+      <div id="citations" aria-live="polite" class="citations"></div>
     </section>
   </main>
-  <footer role="contentinfo">
+  <footer role="contentinfo" class="site-footer">
     <p>&copy; 2026 Celebration &amp; Event Planner</p>
   </footer>
   <noscript><p>This application requires JavaScript.</p></noscript>
