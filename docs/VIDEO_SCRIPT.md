@@ -29,4 +29,21 @@ Record real app, no slides. Show URL bar at start (proves Live URL).
 - "LLM-agnostic: offline echo by default, Gemini/OpenAI toggle. SQLite store, FastAPI, deploys anywhere incl. Cloud Run."
 - End on Live URL + GitHub link.
 
+## Sample ask queries (use these in the demo)
+
+Grounded (expect citations + Grounded/Partial):
+- "outdoor ceremony ideas"
+- "budget-friendly decor ideas for a garden wedding"
+- "kids birthday party entertainment ideas"
+- "community event permit and safety checklist"
+- "corporate event catering and AV ideas"
+
+Cannot Determine (expect exact refusal + Cannot Determine badge):
+- "best honeymoon destination in Maldives"
+- "what is the capital of France"
+- "stock market tips for 2026"
+
+Plain-language toggle demo:
+- Re-ask "outdoor ceremony ideas" with plain language on → simpler wording, same citations.
+
 Checklist: 1080p, captions on, no API keys visible, sample data is fake/redacted.

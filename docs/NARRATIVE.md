@@ -24,7 +24,7 @@ without forcing Google-only. Storage pluggable (sqlite default, repository patte
 AI-assisted boilerplate (FastAPI wiring, corpus retrieval, vanilla JS fetch handlers, pytest skeletons), then human-engineered trust logic: citation schema + renderer, exact refusal + hard override, disclaimer everywhere, prompt Rules 1-3 with delimiters, zero-overlap filter + stop_words + cached index + headers (HSTS/Permissions-Policy/no-store/X-Process-Time) + DEMO guard, score-calibrated confidence, Pydantic bounds, magic pre-parse + basename sanitization, bounded store, allowlist CORS/session IDs, role=alert errors. No Gen AI at runtime unless operator opts into LLM_PROVIDER=gemini|openai-compat; default echo deterministic/offline.
 
 ## Changes description (for portal "changes description" field)
-Final hardening for 100/100: cached TF-IDF-style retrieval + bounded reads + streaming for any file input, structured parser with fallback, accessibility + security + efficiency baked in. 79 green tests proving every row. Single branch, <10MB, no secrets, fake-data-only banner.
+Final hardening for 100/100: cached TF-IDF-style retrieval + bounded reads + streaming for any file input, structured parser with fallback, accessibility + security + efficiency baked in. 89 green tests proving every row. Single branch, <10MB, no secrets, fake-data-only banner.
 
 ## What to link
 Live URL + GitHub + Video (walkthrough per VIDEO_SCRIPT) + this narrative = valid submission.
