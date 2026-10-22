@@ -14,8 +14,8 @@ class EventCreate(BaseModel):
     """Schema for creating an event."""
 
     name: str = Field(..., min_length=1, max_length=200)
-    event_type: str = Field("other")
-    event_date: str
+    event_type: str = Field("other", max_length=50)
+    event_date: str = Field(..., max_length=20)
     guest_count: int = Field(0, ge=0, le=100000)
     budget_total: float = Field(0.0, ge=0)
     theme: str = Field("", max_length=200)
@@ -39,18 +39,23 @@ class EventUpdate(BaseModel):
 class IdeasRequest(BaseModel):
     """Schema for an ideas request."""
 
-    event_id: str
+    event_id: str = Field(..., max_length=128)
     query: str = Field(..., min_length=3, max_length=500)
     top_k: int = Field(5, ge=1, le=10)
     plain_language: bool = False
 
 
 class AskRequest(BaseModel):
-    """Schema for an ask request."""
+    """Schema for an ask request.
 
-    event_id: str | None = None
-    query: str | None = None
-    question: str | None = None
+    The free-text fields are bounded (2000 matches the ``notes`` cap) so a
+    single request cannot ship an unbounded string into retrieval and the
+    prompt builder; ``event_id`` matches the ``ExportRequest`` cap.
+    """
+
+    event_id: str | None = Field(None, max_length=128)
+    query: str | None = Field(None, min_length=3, max_length=2000)
+    question: str | None = Field(None, min_length=3, max_length=2000)
     top_k: int = Field(5, ge=1, le=10)
     plain_language: bool = False
 

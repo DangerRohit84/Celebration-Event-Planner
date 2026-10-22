@@ -42,7 +42,7 @@ NOQA_PATTERN = re.compile(r"#\s*noqa:\s*([A-Z]+[0-9]+)")
 EXPECTED_NOQA_SITES = {
     "backend/app/ingest.py": {"BLE001": 2},
     "backend/app/llm/factory.py": {"BLE001": 2},
-    "backend/app/main.py": {"BLE001": 1},
+    "backend/app/main.py": {"BLE001": 2},
     "backend/app/models.py": {"UP017": 2},
     "backend/app/retrieval.py": {"BLE001": 3},
     "backend/app/routes.py": {"UP017": 1, "BLE001": 2, "B008": 1},

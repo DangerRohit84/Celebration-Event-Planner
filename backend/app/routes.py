@@ -7,6 +7,7 @@ in planner.py / retrieval.py / prompting.py / storage.py.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -483,7 +484,9 @@ async def upload(file: UploadFile = File(...)) -> dict:  # noqa: B008
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     try:
-        document = parse_pdf(raw, filename)
+        # CPU-bound parse runs on a worker thread so a crafted PDF cannot
+        # stall the event loop (and with it the whole service).
+        document = await asyncio.to_thread(parse_pdf, raw, filename)
     except DocumentError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     try:

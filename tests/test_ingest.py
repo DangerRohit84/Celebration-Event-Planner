@@ -175,6 +175,22 @@ def test_upload_rejects_a_truncated_pdf(client: TestClient) -> None:
     assert r.status_code == 400
 
 
+def test_upload_rejects_a_corrupted_pdf_with_a_clean_400(client: TestClient) -> None:
+    """A structurally corrupted PDF must fail fast with a 400, never a 500.
+
+    The file keeps a valid header and real objects but its xref/trailer
+    region is cut off, so the parser hits a broken structure instead of a
+    merely short file.
+    """
+    corrupted = build_text_pdf()[:-40]
+    r = client.post(
+        "/upload",
+        files={"file": ("broken.pdf", corrupted, "application/pdf")},
+    )
+    assert r.status_code == 400
+    assert "pdf" in r.json()["detail"].lower()
+
+
 def test_upload_rejects_a_scanned_pdf(client: TestClient) -> None:
     """A scanned document with no text must be rejected with a 400."""
     r = client.post(

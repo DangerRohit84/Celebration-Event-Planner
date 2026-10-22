@@ -167,6 +167,11 @@ async def security_headers(
 ) -> Response:
     """Attach security headers and rate-limit info to every response.
 
+    An unhandled downstream exception is converted into a bare 500 JSON
+    response that still carries the full header set: Starlette's
+    ``ServerErrorMiddleware`` sits outside this middleware and would
+    otherwise emit a headerless 500, so the error path is handled here.
+
     Args:
         request: Incoming request being processed.
         call_next: Downstream handler producing the response.
@@ -182,7 +187,16 @@ async def security_headers(
         _attach_headers(resp, request, start, limited=True)
         return resp
 
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:  # noqa: BLE001
+        # Logged server-side only; the client gets a bare 500 with headers.
+        logger.exception(
+            "unhandled error on %s %s", request.method, request.url.path,
+        )
+        response = JSONResponse(
+            status_code=500, content={"detail": "Internal server error"},
+        )
     _attach_headers(response, request, start)
     return response
 
