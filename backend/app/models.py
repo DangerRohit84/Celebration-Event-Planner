@@ -112,19 +112,3 @@ class Chunk:
     clause: str = ""
     text: str = ""
     score: float = 0.0
-
-
-@dataclass
-class Plan:
-    """Generated plan artifact."""
-
-    event_id: str
-    budget_breakdown: list[BudgetLine] = field(default_factory=list)
-    timeline: list[TimelineMilestone] = field(default_factory=list)
-    vendor_checklist: list[Vendor] = field(default_factory=list)
-    ideas: list[str] = field(default_factory=list)
-    citations: list[dict] = field(default_factory=list)  # grounded idea sources
-    disclaimer: str = (
-        "General planning information only - not professional advice. "
-        "Verify with vendors and qualified planners."
-    )

@@ -5,7 +5,7 @@ Mirrors proven patterns from prior run:
 - Magic-byte validation before parse.
 - Filename sanitization (traversal-safe, control-char strip, length cap).
 - Text sanitization for user inputs.
-- Allowlisted session IDs.
+- Allowlisted CORS origins (see config.parse_allowed_origins).
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ def validate_pdf_magic(raw_bytes: bytes | bytearray) -> bool:
         TypeError: When the input is not a bytes-like object.
         ValueError: When the bytes do not start with the PDF magic header.
     """
-    if not isinstance(raw_bytes, (bytes, bytearray)):
+    if not isinstance(raw_bytes, bytes | bytearray):
         raise TypeError("invalid pdf magic")
     if not bytes(raw_bytes).startswith(PDF_MAGIC):
         raise ValueError("invalid pdf magic")
@@ -144,7 +144,7 @@ def validate_pre_parse(
         ValueError: When the filename, size, content type, or magic bytes fail
             validation.
     """
-    if isinstance(first, (bytes, bytearray)):
+    if isinstance(first, bytes | bytearray):
         # Legacy style: (data, filename, content_type).
         if data is not None:
             raise TypeError(
@@ -181,29 +181,7 @@ def validate_pre_parse(
         raise ValueError("File too large: max 10 MB")
     if len(raw_bytes) > settings.max_upload_bytes:
         raise ValueError("File too large: max 10 MB")
-    if not raw_bytes or not raw_bytes.startswith(PDF_MAGIC):
-        raise ValueError("invalid pdf magic")
+    validate_pdf_magic(raw_bytes)
     if content_type and content_type not in ALLOWED_CONTENT_TYPES:
         raise ValueError("PDF only: invalid content-type")
     return True
-
-
-def sanitize_session_id(raw: object) -> str:
-    """Allowlist [A-Za-z0-9_-], max 64. Empty -> '' (no session).
-
-    Args:
-        raw: Raw session identifier supplied by the client.
-
-    Returns:
-        The allowlisted session identifier, or an empty string when absent.
-    """
-    if not raw:
-        return ""
-    if not isinstance(raw, str):
-        # support FakeReq-like? no, expect str
-        try:
-            raw = str(raw)
-        except Exception:  # noqa: BLE001
-            return ""
-    cleaned = re.sub(r"[^A-Za-z0-9_-]", "", raw)
-    return cleaned[:64]

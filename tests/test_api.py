@@ -5,14 +5,15 @@ from fastapi.testclient import TestClient
 
 from backend.app import main as main_module
 from backend.app.main import app
+from tests.pdf_support import build_text_pdf
 
 
 @pytest.fixture()
 def client():
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
     with TestClient(app) as c:
         yield c
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
 
 
 def test_health(client):
@@ -148,9 +149,16 @@ def test_export(client):
 
 def test_upload(client):
     r = client.post(
-        "/upload", files={"file": ("x.pdf", b"%PDF-1.4", "application/pdf")}
+        "/upload",
+        files={"file": ("x.pdf", build_text_pdf(), "application/pdf")},
     )
     assert r.status_code == 200
+    body = r.json()
+    assert body["filename"] == "x.pdf"
+    assert body["status"] == "accepted"
+    assert body["pages"] > 0
+    assert body["chunks"] > 0
+    assert body["upload_id"]
 
 
 def test_upload_rejects_bad(client):

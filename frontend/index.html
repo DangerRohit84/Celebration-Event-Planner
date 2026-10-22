@@ -99,9 +99,17 @@
           <input id="q" type="text" aria-describedby="askHint" autocomplete="off" placeholder="e.g. outdoor ceremony ideas" />
           <span id="askHint" class="hint">Ask for ideas grounded in vetted corpus.</span>
         </div>
+        <div class="field field-plain">
+          <div class="plain-toggle">
+            <input id="plain" name="plain_language" type="checkbox" aria-describedby="plainHint" />
+            <label for="plain">Simple language</label>
+          </div>
+          <span id="plainHint" class="hint">Short, jargon-free sentences. Same citations.</span>
+        </div>
         <button type="button" id="askBtn" class="btn btn-primary">Ask</button>
       </div>
       <div id="answer" role="status" aria-live="polite" tabindex="-1" class="answer"></div>
+      <div id="answerMode" class="hint" aria-live="polite"></div>
       <div id="citations" role="status" aria-live="polite" class="citations"></div>
     </section>
   </main>

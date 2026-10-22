@@ -60,7 +60,7 @@ def test_dip_port():
 def _iter_functions(tree):
     """Yield every function and method definition in a parsed module."""
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             yield node
 
 

@@ -9,9 +9,11 @@ import re
 from html.parser import HTMLParser
 from pathlib import Path
 
-HTML = Path("frontend/index.html").read_text(encoding="utf-8")
-CSS = Path("frontend/styles.css").read_text(encoding="utf-8")
-JS = Path("frontend/app.js").read_text(encoding="utf-8")
+# Anchored to the repository root so collection never depends on the cwd.
+ROOT = Path(__file__).resolve().parents[1]
+HTML = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+CSS = (ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
+JS = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
 
 FORM_CONTROL_TAGS = ("input", "select", "textarea")
 INTERACTIVE_TAGS = ("input", "select", "textarea", "button")
@@ -214,12 +216,51 @@ def test_client_keeps_existing_dom_ids() -> None:
         "status",
         "errors",
         "answer",
+        "answerMode",
         "citations",
         "askBtn",
         "exportBtn",
         "q",
+        "plain",
     ):
         assert element_id in JS, f"app.js no longer references #{element_id}"
+
+
+def test_plain_language_toggle_exists_and_is_labelled() -> None:
+    """The simple-language switch must exist and carry a real label."""
+    checkboxes = [
+        (tag, element_id, attributes)
+        for tag, element_id, attributes in DOM.controls
+        if attributes.get("type") == "checkbox"
+    ]
+    assert checkboxes, "no plain-language checkbox found in frontend/index.html"
+    ids = {element_id for _tag, element_id, _attributes in checkboxes}
+    assert "plain" in ids
+    assert "plain" in DOM.labels, "the plain-language checkbox has no <label for>"
+
+
+def test_plain_language_toggle_is_described() -> None:
+    """The plain-language switch must point at a hint that exists."""
+    described = [
+        attributes.get("aria-describedby")
+        for _tag, element_id, attributes in DOM.controls
+        if element_id == "plain"
+    ]
+    assert described and described[0]
+    assert described[0] in DOM.ids
+
+
+def test_plain_language_flag_is_sent_to_the_api() -> None:
+    """The client must send the plain_language flag with the question."""
+    code = _strip_comments(JS)
+    assert "plain_language" in code
+    assert "getElementById('plain')" in code
+
+
+def test_answer_mode_is_announced() -> None:
+    """The answer panel reports which language mode was used."""
+    assert 'id="answerMode"' in HTML
+    assert "plain_language" in JS
 
 
 def test_skip_link_and_landmarks_survive() -> None:

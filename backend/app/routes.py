@@ -15,6 +15,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 
 from .config import settings
+from .ingest import DocumentError, get_document_store, parse_pdf, relevant_chunks
 from .llm import build_provider
 from .models import Event, EventType
 from .planner import budget_breakdown, timeline_for, vendor_checklist
@@ -45,9 +46,11 @@ from .schemas import (
 from .security import sanitize_filename, sanitize_text, validate_pre_parse
 from .serializers import (
     budget_line_dict,
+    citation_dicts,
     event_detail,
     event_plan_dict,
     event_summary,
+    idea_texts,
     milestone_dict,
     vendor_dict,
 )
@@ -56,6 +59,9 @@ from .storage import CapacityError, get_store, new_id
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Retry-After written when the bounded event store is full.
+STORE_FULL_RETRY_AFTER_SECONDS = 30
 
 
 def _parse_event_type(value: str) -> EventType:
@@ -127,15 +133,15 @@ def create_event(payload: EventCreate) -> dict:
             notes=sanitize_text(payload.notes, 2000),
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     try:
         store.create_event(ev)
-    except CapacityError:
+    except CapacityError as e:
         raise HTTPException(
             status_code=429,
             detail="event store full",
-            headers={"Retry-After": "30"},
-        )
+            headers={"Retry-After": str(STORE_FULL_RETRY_AFTER_SECONDS)},
+        ) from e
     for line in budget_breakdown(ev):
         store.add_budget_line(line)
     for m in timeline_for(ev):
@@ -214,8 +220,8 @@ def update_event(event_id: str, payload: EventUpdate) -> dict:
     if payload.event_date is not None:
         try:
             ev.event_date = date.fromisoformat(payload.event_date)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="invalid date")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="invalid date") from e
     if payload.guest_count is not None:
         ev.guest_count = payload.guest_count
     if payload.budget_total is not None:
@@ -250,7 +256,9 @@ def delete_event(event_id: str) -> dict:
     return {"deleted": True}
 
 
-def _generate_answer(prompt: str, hits: list[dict]) -> str:
+def _generate_answer(
+    prompt: str, hits: list[dict], plain_language: bool = False,
+) -> str:
     """Answer a grounded prompt, degrading safely when the provider fails.
 
     A provider outage (network timeout, upstream API error, missing SDK) must
@@ -262,13 +270,15 @@ def _generate_answer(prompt: str, hits: list[dict]) -> str:
     Args:
         prompt: Fully rendered prompt to send to the provider.
         hits: Retrieved corpus entries backing the grounded fallback.
+        plain_language: When True, the provider is asked for short,
+            jargon-free sentences.
 
     Returns:
         The provider's answer, or a deterministic grounded answer derived from
         the retrieved hits.
     """
     try:
-        return build_provider().answer(prompt)
+        return build_provider().answer(prompt, plain_language=plain_language)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "LLM provider '%s' failed (%s); degrading to the echo provider",
@@ -276,26 +286,51 @@ def _generate_answer(prompt: str, hits: list[dict]) -> str:
             type(exc).__name__,
         )
     try:
-        return build_provider("echo").answer(prompt)
+        return build_provider("echo").answer(prompt, plain_language=plain_language)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Echo provider failed (%s); using the inline grounded fallback",
             type(exc).__name__,
         )
-    return render_grounded_ideas(hits)
+    return render_grounded_ideas(hits, plain_language=plain_language)
 
 
-def _run_ideas(event_id: str, query: str, top_k: int) -> dict:
+def _document_context(query: str) -> list[str]:
+    """Return excerpts from the session document that match the query.
+
+    The most recently uploaded document acts as the session document. Its
+    chunks are ranked by term overlap with the query and the best few are
+    injected into the prompt as additional background.
+
+    Args:
+        query: The user's question.
+
+    Returns:
+        The matching chunk texts, or an empty list when no document has been
+        uploaded or nothing in it matches the query.
+    """
+    document = get_document_store().latest()
+    if document is None:
+        return []
+    return relevant_chunks(document, query)
+
+
+def _run_ideas(
+    event_id: str, query: str, top_k: int, plain_language: bool = False,
+) -> dict:
     """Run idea generation for an event.
 
     Args:
         event_id: Identifier of the event the ideas belong to.
         query: User question to ground the ideas in.
         top_k: Maximum number of corpus entries to retrieve.
+        plain_language: When True, the answer is written in short,
+            jargon-free sentences.
 
     Returns:
-        A mapping with the ideas, their confidence label, citations, and the
-        disclaimer; a "Cannot Determine" payload when nothing was retrieved.
+        A mapping with the ideas, their confidence label, citations, the
+        disclaimer, and whether plain language was used; a "Cannot Determine"
+        payload when nothing was retrieved.
 
     Raises:
         HTTPException: With status 404 when the event does not exist.
@@ -307,27 +342,32 @@ def _run_ideas(event_id: str, query: str, top_k: int) -> dict:
     et = ev.event_type.value if hasattr(ev.event_type, "value") else str(ev.event_type)
     hits = retrieve_ideas(query, top_k=top_k, event_type=et)
     if not hits:
-        return {"ideas": [], "confidence": "Cannot Determine",
-                "citations": [], "disclaimer": DISCLAIMER,
-                "answer": CANNOT_DETERMINE, "ideas_text": CANNOT_DETERMINE}
-    prompt = build_ideas_prompt(query, hits, et)
-    text = _generate_answer(prompt, hits)
-    conf = calibrate_confidence(hits)
-    cites = [
-        {
-            "id": str(h.get("id") or ""),
-            "text": str(h.get("text") or ""),
-            "score": float(h.get("score") or 0.0),
+        return {
+            "ideas": [],
+            "confidence": "Cannot Determine",
+            "citations": [],
+            "disclaimer": DISCLAIMER,
+            "answer": CANNOT_DETERMINE,
+            "ideas_text": CANNOT_DETERMINE,
+            "plain_language": plain_language,
         }
-        for h in hits
-    ]
+    prompt = build_ideas_prompt(
+        query,
+        hits,
+        et,
+        plain_language=plain_language,
+        document_chunks=_document_context(query),
+    )
+    text = _generate_answer(prompt, hits, plain_language=plain_language)
+    conf = calibrate_confidence(hits)
     return {
         "ideas_text": text,
-        "ideas": [str(h.get("text") or "") for h in hits],
+        "ideas": idea_texts(hits),
         "confidence": conf,
-        "citations": cites,
+        "citations": citation_dicts(hits),
         "disclaimer": DISCLAIMER,
         "answer": text,
+        "plain_language": plain_language,
     }
 
 
@@ -344,7 +384,9 @@ def ideas(payload: IdeasRequest) -> dict:
     Raises:
         HTTPException: With status 404 when the event does not exist.
     """
-    return _run_ideas(payload.event_id, payload.query, payload.top_k)
+    return _run_ideas(
+        payload.event_id, payload.query, payload.top_k, payload.plain_language,
+    )
 
 
 @router.post("/ask", response_model=IdeasResponse)
@@ -367,7 +409,7 @@ def ask(payload: AskRequest) -> dict:
         raise HTTPException(status_code=422, detail="event_id and query required")
     if len(q) < 3:
         raise HTTPException(status_code=422, detail="query too short")
-    return _run_ideas(eid, q, payload.top_k)
+    return _run_ideas(eid, q, payload.top_k, payload.plain_language)
 
 
 @router.post("/export", response_model=ExportResponse)
@@ -398,17 +440,25 @@ def export_event(payload: ExportRequest) -> dict:
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload(file: UploadFile = File(...)) -> dict:  # noqa: B008
-    """Upload a PDF document.
+    """Upload and parse a PDF document.
+
+    The upload is validated before it is parsed (extension, bounded read,
+    magic bytes, content type), then the PDF is opened with ``pypdf`` to
+    count its pages and extract its text. The extracted text is split into
+    section-aware chunks that are kept for the session, so a later question
+    can be grounded in the uploaded document as well as in the vetted corpus.
 
     Args:
         file: Uploaded PDF payload, read with a bounded buffer.
 
     Returns:
-        A mapping with the sanitized filename, size, and acceptance status.
+        A mapping with the sanitized filename, size, acceptance status, the
+        upload identifier, the page count, and the number of chunks kept.
 
     Raises:
-        HTTPException: With status 413 when the file exceeds the size limit and
-            status 400 when it fails PDF pre-parse validation.
+        HTTPException: With status 413 when the file exceeds the size limit,
+            status 400 when it fails PDF pre-parse validation or cannot be
+            parsed (for example a scanned, image-only document).
     """
     raw = await file.read(settings.max_upload_bytes + 1)
     if len(raw) > settings.max_upload_bytes:
@@ -418,5 +468,17 @@ async def upload(file: UploadFile = File(...)) -> dict:  # noqa: B008
     try:
         validate_pre_parse(filename, content_type, len(raw), raw)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return {"filename": filename, "size": len(raw), "status": "accepted"}
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        document = parse_pdf(raw, filename)
+    except DocumentError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    get_document_store().add(document)
+    return {
+        "filename": filename,
+        "size": len(raw),
+        "status": "accepted",
+        "upload_id": document.document_id,
+        "pages": document.pages,
+        "chunks": len(document.chunks),
+    }

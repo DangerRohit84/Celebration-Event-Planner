@@ -531,6 +531,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   align-items: center;
 }
 .ask-row .field { flex: 1 1 320px; }
+.field-plain { flex: 0 1 240px; gap: 2px; }
+.plain-toggle { display: flex; align-items: center; gap: 10px; }
+.plain-toggle input[type="checkbox"] {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
 
 .answer {
   margin-top: 16px;

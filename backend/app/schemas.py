@@ -42,6 +42,7 @@ class IdeasRequest(BaseModel):
     event_id: str
     query: str = Field(..., min_length=3, max_length=500)
     top_k: int = Field(5, ge=1, le=10)
+    plain_language: bool = False
 
 
 class AskRequest(BaseModel):
@@ -51,6 +52,7 @@ class AskRequest(BaseModel):
     query: str | None = None
     question: str | None = None
     top_k: int = Field(5, ge=1, le=10)
+    plain_language: bool = False
 
 
 class ExportRequest(BaseModel):
@@ -201,6 +203,7 @@ class IdeasResponse(BaseModel):
     citations: list[Citation]
     disclaimer: str
     answer: str
+    plain_language: bool = False
 
 
 class ExportResponse(BaseModel):
@@ -219,3 +222,6 @@ class UploadResponse(BaseModel):
     filename: str
     size: int
     status: str
+    upload_id: str = ""
+    pages: int = 0
+    chunks: int = 0

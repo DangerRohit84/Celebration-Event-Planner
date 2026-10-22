@@ -3,9 +3,11 @@
 import re
 from pathlib import Path
 
-HTML = Path("frontend/index.html").read_text(encoding="utf-8")
-CSS = Path("frontend/styles.css").read_text(encoding="utf-8")
-JS = Path("frontend/app.js").read_text(encoding="utf-8")
+# Anchored to the repository root so collection never depends on the cwd.
+ROOT = Path(__file__).resolve().parents[1]
+HTML = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+CSS = (ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
+JS = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
 
 
 def test_html_lang_and_meta():
@@ -51,9 +53,22 @@ def test_noscript_and_disclaimer():
     assert "General information only" in HTML
 
 
+def _strip_comments(source):
+    """Remove line and block comments so prose is not mistaken for code."""
+    without_blocks = re.sub(r"/\*.*?\*/", " ", source, flags=re.DOTALL)
+    return re.sub(r"//[^\n]*", " ", without_blocks)
+
+
 def test_xss_safe():
-    assert "escapeHtml" in JS
-    assert "textContent" in JS
+    # Every DOM write goes through textContent / createElement, so no HTML
+    # escaping pass is needed and none is applied.
+    code = _strip_comments(JS)
+    assert "textContent" in code
+    assert "createElement" in code
+    assert "innerHTML" not in code
+    assert "insertAdjacentHTML" not in code
+    assert "outerHTML" not in code
+    assert "escapeHtml" not in code
 
 
 def test_inputs_labels():

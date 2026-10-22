@@ -4,15 +4,25 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from ..prompting import CANNOT_DETERMINE, plain_sentence
+
+PLAIN_LANGUAGE_SYSTEM = (
+    "You explain celebration and event planning in simple everyday language. "
+    "Use short sentences, one idea per sentence, and no jargon."
+)
+
 
 class LLMProvider(Protocol):
     """Port for LLM providers (DIP)."""
 
-    def answer(self, prompt: str) -> str:
+    def answer(self, prompt: str, *, plain_language: bool = False) -> str:
         """Answer a prompt with the provider's model.
 
         Args:
             prompt: Fully rendered prompt text to answer.
+            plain_language: When True, the answer must be written in short,
+                jargon-free sentences. Implementations that call out to a
+                remote model pass the flag into their system prompt.
 
         Returns:
             The generated answer text.
@@ -23,14 +33,16 @@ class LLMProvider(Protocol):
 class EchoProvider:
     """Deterministic offline baseline: returns a trimmed lead of the prompt context."""
 
-    def answer(self, prompt: str, *args, **kwargs) -> str:
+    def answer(self, prompt: str, *, plain_language: bool = False) -> str:
         """Return a deterministic lead of the prompt context.
+
+        In plain-language mode the entries are shortened and their bracketed
+        source markers are dropped, so the plain-language rendering is
+        visibly different from the standard one.
 
         Args:
             prompt: Prompt text whose bracketed context lines are extracted.
-            *args: Ignored extra positional arguments, accepted for compatibility.
-            **kwargs: Optional ``plain_language`` flag that selects a plain-language
-                heading for the returned ideas.
+            plain_language: When True, render the ideas in a simpler form.
 
         Returns:
             The extracted ideas, or a "Cannot Determine" notice when the prompt
@@ -40,7 +52,8 @@ class EchoProvider:
         lines = [ln for ln in prompt.splitlines() if ln.strip()]
         ctx = [ln for ln in lines if ln.startswith("[")]
         if not ctx:
-            return "Cannot Determine from the provided context."
-        if kwargs.get("plain_language"):
-            return "Ideas (plain language):\n" + "\n".join(f"- {c}" for c in ctx[:5])
+            return CANNOT_DETERMINE
+        if plain_language:
+            body = "\n".join(f"- {plain_sentence(c)}" for c in ctx[:5])
+            return "Simple ideas:\n" + body
         return "Ideas:\n" + "\n".join(f"- {c}" for c in ctx[:5])

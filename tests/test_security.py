@@ -7,7 +7,6 @@ from backend.app import main as main_module
 from backend.app.main import app
 from backend.app.security import (
     sanitize_filename,
-    sanitize_session_id,
     sanitize_text,
     validate_pdf_magic,
     validate_pre_parse,
@@ -56,20 +55,20 @@ def test_legal_style_validate_pre_parse():
     assert raised
 
 
-def test_session_id_allowlisted():
-    assert sanitize_session_id("sess-a_1") == "sess-a_1"
-    evil = sanitize_session_id("../../evil!@#")
-    assert ".." not in evil and "/" not in evil
-    assert sanitize_session_id(None) == ""
-    assert len(sanitize_session_id("x" * 200)) <= 64
+def test_pre_parse_uses_the_shared_magic_helper():
+    """The magic-byte check must be the single shared helper."""
+    import inspect
+
+    source = inspect.getsource(validate_pre_parse)
+    assert "validate_pdf_magic(raw_bytes)" in source
 
 
 @pytest.fixture()
 def client():
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
     with TestClient(app) as c:
         yield c
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
 
 
 def test_security_headers(client):
@@ -100,7 +99,7 @@ def test_rate_limit_headers(client):
 def test_rate_limit_429(client):
     old = main_module.settings.rate_limit_per_min
     main_module.settings.rate_limit_per_min = 2
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
     try:
         assert client.get("/health").status_code == 200
         assert client.get("/health").status_code == 200
@@ -109,7 +108,7 @@ def test_rate_limit_429(client):
         assert r3.headers.get("Retry-After")
     finally:
         main_module.settings.rate_limit_per_min = old
-        main_module._RATE_BUCKETS.clear()
+        main_module._rate_buckets.clear()
 
 
 def test_cors_not_wildcard(client):

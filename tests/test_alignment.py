@@ -18,10 +18,10 @@ def test_cannot_determine_constant():
 
 @pytest.fixture()
 def client():
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
     with TestClient(app) as c:
         yield c
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
 
 
 def test_disclaimer_on_ideas(client):

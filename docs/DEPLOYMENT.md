@@ -16,19 +16,45 @@ Why: Dockerfile honours $PORT, stateless-friendly (SQLite per instance — fine 
 
 - Build: `pip install -r requirements.txt`
 - Start: `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`
-- Env: `LLM_PROVIDER=echo` (or gemini/openai-compat keys) + `DEMO_MODE=true` on dashboard (keeps single-tenant demo global fallback for video stability; prod multi-user sets `DEMO_MODE=false`).
+- Env: `LLM_PROVIDER=echo` (or gemini/openai-compat keys). The app is a single-tenant demo with no
+  authentication, so every visitor shares the same SQLite file — keep it that way for the demo
+  video, and add auth before exposing it to real users.
 
 ## Option C: Vercel (Python)
 
 - Keep `backend/app/main.py` as the entry; add `vercel.json` routing `/ -> backend/app/main.py` if needed.
 - Note: serverless cold starts clear in-memory state — re-create events per session (call out in video).
 
+## Configuration (every variable is read by `backend/app/config.py`)
+
+| Variable | Default | Effect |
+|---|---|---|
+| `LLM_PROVIDER` | `echo` | `echo` (offline), `gemini`, `openai-compat` |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | empty / `gemini-2.0-flash` | Gemini credentials and model |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | empty | OpenAI-compatible endpoint |
+| `STORE_BACKEND` | `sqlite` | `sqlite` or `memory` (tests) |
+| `DATABASE_URL` | `sqlite:///./data/events.db` | SQLite file path |
+| `FRONTEND_ORIGIN` | `http://localhost:8000` | Comma-separated CORS allowlist; wildcards are dropped, never `*` |
+| `RATE_LIMIT_PER_MIN` | `200` | Per-client sliding-window limit → 429 + `Retry-After` |
+| `MAX_RATE_BUCKETS` | `10000` | Upper bound on tracked rate-limit buckets (LRU eviction) |
+| `MAX_UPLOAD_BYTES` | `10485760` | Upload size cap (10 MB) |
+| `MAX_STORE_EVENTS` | `5000` | Event-store capacity → 429 when full |
+| `MAX_STORE_CHUNKS` | `1000` | Chunks retained per uploaded document |
+| `MAX_DOCUMENTS` | `10` | Uploaded documents kept in the session store |
+| `PORT` | `8000` | Listen port |
+| `LOG_LEVEL` | `info` | Root log level |
+
+Copy `.env.example` to `.env` for local runs. `.env` is gitignored; only `.env.example` is tracked.
+
 ## Prod hardening (post-MVP)
 
-- CORS is secure-by-default (no middleware unless FRONTEND_ORIGIN/ALLOWED_ORIGINS set — never *). For cross-origin prod: `--set-env-vars FRONTEND_ORIGIN=https://your-app.run.app`.
+- CORS is secure-by-default: the middleware is always installed, but the allowlist is parsed from
+  `FRONTEND_ORIGIN` by `parse_allowed_origins`, which drops wildcards and malformed entries. An
+  empty allowlist means no `Access-Control-Allow-Origin` header is sent and the browser blocks
+  every cross-origin call. For cross-origin prod: `--set-env-vars FRONTEND_ORIGIN=https://your-app.run.app`.
 - Security headers on (nosniff/DENY/no-referrer/CSP + HSTS + Permissions-Policy + no-store + X-Process-Time) + X-RateLimit-*/Retry-After + non-root Docker + HEALTHCHECK /health.
-- Upload DoS-safe: extension + basename sanitization (traversal-safe) + size + %PDF- magic pre-parse, bounded store (MAX_STORE_EVENTS, 429 when full), bounded guest_count/top_k (422), sliding-window rate limit (RATE_LIMIT_PER_MIN=200, tested 429 + Retry-After), safe errors (no Traceback).
-- Efficiency: bounded top_k/doc_ids fan-out, sanitized inputs, Pydantic bounds.
+- Upload DoS-safe: extension + basename sanitization (traversal-safe) + size + %PDF- magic pre-parse, then a bounded pypdf parse (a PDF with no pages or no extractable text is rejected with 400); bounded store (MAX_STORE_EVENTS, 429 when full), bounded guest_count/top_k (422), sliding-window rate limit (RATE_LIMIT_PER_MIN=200, tested 429 + Retry-After), safe errors (no Traceback).
+- Efficiency: bounded top_k fan-out, cached TF-IDF index (fitted once, query transform only), sanitized inputs, Pydantic bounds.
 - Add Redis/pgvector for shared index across instances.
 - Add auth + per-user event isolation (current MVP is demo, not multi-tenant prod).
 - Add request logging (no PII) + tighter per-tier rate limits.

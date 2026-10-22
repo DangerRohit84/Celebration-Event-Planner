@@ -5,8 +5,6 @@ from __future__ import annotations
 from ..config import settings
 from .base import EchoProvider, LLMProvider
 
-EchoGroundedProvider = EchoProvider
-
 
 def build_provider(provider: str | None = None) -> LLMProvider:
     """Build an LLM provider by name, falling back to echo on import/runtime errors.
@@ -35,19 +33,3 @@ def build_provider(provider: str | None = None) -> LLMProvider:
         except Exception:  # noqa: BLE001
             return EchoProvider()
     return EchoProvider()
-
-
-def get_provider(name: str = "echo") -> LLMProvider:
-    """Legal-style alias for build_provider.
-
-    Args:
-        name: Provider name to build.
-
-    Returns:
-        The requested provider instance, or a deterministic echo provider when
-        the named provider cannot be loaded.
-    """
-    # legal-style alias
-    if name == "echo":
-        return EchoProvider()
-    return build_provider(name)

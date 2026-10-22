@@ -1,0 +1,119 @@
+# Project configuration for the Celebration & Event Planner.
+#
+# Every gate quoted in README.md is enforced from this file by
+# scripts/check_quality.py:
+#   - ruff  : lint rules (the `# noqa:` directives in the code map to rules
+#             that are actually enabled here)
+#   - mypy  : type checking
+#   - pytest: test discovery
+#   - coverage: the TOTAL >= 76% floor
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "celebration-event-planner"
+version = "0.1.0"
+description = "Budgets, timelines, vendors, and grounded ideas for celebration events."
+requires-python = ">=3.10"
+
+# --------------------------------------------------------------------------
+# pytest
+# --------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config"
+python_files = ["test_*.py"]
+filterwarnings = ["error::DeprecationWarning:backend.*"]
+
+# --------------------------------------------------------------------------
+# coverage - the enforced floor quoted in README.md
+# --------------------------------------------------------------------------
+
+[tool.coverage.run]
+source = ["backend"]
+branch = false
+omit = ["*/__pycache__/*", "*/tests/*"]
+
+[tool.coverage.report]
+fail_under = 76
+show_missing = true
+skip_covered = false
+omit = ["*/__pycache__/*", "tests/*"]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
+# --------------------------------------------------------------------------
+# ruff - the lint gate
+# --------------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["backend", "tests"]
+extend-exclude = [".venv", "node_modules"]
+
+[tool.ruff.lint]
+# The selected rules cover the codes used by the `# noqa:` directives in the
+# source (BLE001, S110, S112, UP017, B008, D418) plus the pycodestyle,
+# pyflakes, isort, comprehension, return, simplification, pyupgrade,
+# bugbear, bandit and naming families.
+select = [
+    "E4",    # pycodestyle - imports
+    "E7",    # pycodestyle - statements
+    "E9",    # pycodestyle - runtime errors
+    "W",     # pycodestyle - warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "C4",    # flake8-comprehensions
+    "RET",   # flake8-return
+    "SIM",   # flake8-simplify
+    "PIE",   # flake8-pie
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "BLE",   # flake8-blind-except
+    "S",     # flake8-bandit
+    "D418",  # pydocstyle - overloaded function must carry a docstring
+]
+ignore = [
+    "E501",    # line length is handled by the formatter, not the linter
+    "S101",    # assert - the point of a test suite
+    "B008",    # FastAPI dependency defaults (File(...), Depends(...))
+    "PLR2004", # magic values are used deliberately in domain tables
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]
+
+# --------------------------------------------------------------------------
+# mypy - the type gate
+# --------------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.10"
+files = ["backend/app"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = false
+warn_return_any = false
+no_implicit_optional = true
+strict_equality = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = false
+show_error_codes = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "pypdf.*", "google.*", "openai.*"]
+ignore_missing_imports = true

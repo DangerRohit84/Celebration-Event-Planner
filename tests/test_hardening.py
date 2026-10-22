@@ -1,9 +1,12 @@
 """Hardening tests."""
 
+import re
+
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
 from backend.app.security import validate_pre_parse
+from tests.pdf_support import build_text_pdf
 
 
 def test_magic_rejects_text():
@@ -28,10 +31,12 @@ def test_pre_parse_legal_style():
 def test_doc_id_entropy():
     client = TestClient(app)
     r = client.post(
-        "/upload", files={"file": ("r.pdf", b"%PDF-1.4", "application/pdf")}
+        "/upload",
+        files={"file": ("r.pdf", build_text_pdf(), "application/pdf")},
     )
-    # upload doesn't return doc_id; skip
     assert r.status_code == 200
+    upload_id = r.json()["upload_id"]
+    assert re.fullmatch(r"[0-9a-f]{32}", upload_id)
 
 
 def test_security_headers_present():

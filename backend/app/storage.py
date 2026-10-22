@@ -915,7 +915,7 @@ class SQLiteStore:
             ]
 
     # --- helpers ---
-    def _row_to_event(self, r) -> Event:
+    def _row_to_event(self, r: sqlite3.Row) -> Event:
         """Convert a database row into an event entity.
 
         Args:
@@ -944,7 +944,7 @@ class SQLiteStore:
             updated_at=datetime.fromisoformat(r["updated_at"]),
         )
 
-    def _row_to_vendor(self, r) -> Vendor:
+    def _row_to_vendor(self, r: sqlite3.Row) -> Vendor:
         """Convert a database row into a vendor entity.
 
         Args:

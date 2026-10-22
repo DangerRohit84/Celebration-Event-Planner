@@ -68,23 +68,6 @@ def _int(name: str, default: int) -> int:
         return default
 
 
-def _bool(name: str, default: bool) -> bool:
-    """Parse a boolean env var.
-
-    Args:
-        name: Environment variable name to read.
-        default: Value returned when the variable is unset.
-
-    Returns:
-        True when the variable holds a truthy token ("1", "true", "yes", "on"),
-        otherwise False.
-    """
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
 @dataclass
 class Settings:
     """Application settings loaded from environment variables."""
@@ -107,8 +90,10 @@ class Settings:
     max_rate_buckets: int = _int("MAX_RATE_BUCKETS", 10000)
     max_upload_bytes: int = _int("MAX_UPLOAD_BYTES", 10 * 1024 * 1024)
     max_store_events: int = _int("MAX_STORE_EVENTS", 5000)
+
+    # Uploaded documents
     max_store_chunks: int = _int("MAX_STORE_CHUNKS", 1000)
-    demo_mode: bool = _bool("DEMO_MODE", True)
+    max_documents: int = _int("MAX_DOCUMENTS", 10)
 
     # App
     port: int = _int("PORT", 8000)

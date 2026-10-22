@@ -7,6 +7,7 @@ payloads are built by serializers.py.
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 
@@ -18,6 +19,13 @@ from starlette.middleware.base import RequestResponseEndpoint
 
 from .config import settings
 from .routes import router
+
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(
+    level=str(settings.log_level).upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 app = FastAPI(title="Celebration & Event Planner", version="0.1.0")
 
@@ -37,8 +45,9 @@ app.add_middleware(
 # Bounded LRU: buckets are refreshed on use and the least recently used
 # (therefore stale) ones are evicted once the store exceeds its cap.
 _RATE_WINDOW_SECONDS = 60.0
+# Retry-After written when a client exceeds the rate limit.
+RATE_LIMIT_RETRY_AFTER_SECONDS = 60
 _rate_buckets: dict[str, list[float]] = {}
-_RATE_BUCKETS = _rate_buckets
 
 # --- Security headers ---
 CONTENT_SECURITY_POLICY = (
@@ -149,7 +158,7 @@ def _attach_headers(
     resp.headers["X-RateLimit-Remaining"] = str(remaining)
     resp.headers["X-RateLimit-Reset"] = str(reset)
     if limited:
-        resp.headers["Retry-After"] = "60"
+        resp.headers["Retry-After"] = str(RATE_LIMIT_RETRY_AFTER_SECONDS)
 
 
 @app.middleware("http")
@@ -184,5 +193,5 @@ _STATIC_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 try:
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
-except Exception:  # noqa: BLE001, S110
-    pass
+except Exception as exc:  # noqa: BLE001
+    logger.warning("static files unavailable at %s (%s)", _STATIC_DIR, type(exc).__name__)

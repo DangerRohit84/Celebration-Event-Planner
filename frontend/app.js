@@ -1,16 +1,13 @@
-// Client: create event, show status/errors accessibly.
+// Client: create event, ask for grounded ideas, export the plan.
 //
 // Safety: every DOM write goes through textContent / createElement - this
-// file never uses innerHTML, so user-supplied text can never be parsed as
-// markup. escapeHtml() is kept as defence in depth for any future
-// string-building helper.
+// file never injects markup through a raw-HTML setter, so user-supplied
+// text can never be parsed as markup, and no HTML escaping pass is needed.
 const form = document.getElementById('create-form');
 const statusEl = document.getElementById('status');
 const errorEl = document.getElementById('errors');
 
 let lastEventId = null;
-
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function setLoading(btn, loading) {
   if (!btn) return;
@@ -43,10 +40,10 @@ form?.addEventListener('submit', async (e) => {
     const json = await res.json();
     lastEventId = json.event_id;
     try { localStorage.setItem('lastEventId', lastEventId); } catch (e) {}
-    statusEl.textContent = 'Created event ' + escapeHtml(json.event_id);
+    statusEl.textContent = 'Created event ' + json.event_id;
     statusEl.focus();
   } catch (err) {
-    errorEl.textContent = escapeHtml(err.message);
+    errorEl.textContent = err.message;
     statusEl.textContent = '';
     errorEl.focus();
   } finally {
@@ -62,7 +59,10 @@ try {
 
 document.getElementById('askBtn')?.addEventListener('click', async () => {
   const q = document.getElementById('q').value;
+  const plainBox = document.getElementById('plain');
+  const plainLanguage = Boolean(plainBox && plainBox.checked);
   const answerEl = document.getElementById('answer');
+  const answerModeEl = document.getElementById('answerMode');
   const citationsEl = document.getElementById('citations');
   const askBtn = document.getElementById('askBtn');
   errorEl.textContent = '';
@@ -70,16 +70,23 @@ document.getElementById('askBtn')?.addEventListener('click', async () => {
     answerEl.textContent = 'Create an event first, then ask for personalized ideas.';
     answerEl.focus();
     if (citationsEl) citationsEl.textContent = '';
+    if (answerModeEl) answerModeEl.textContent = '';
     return;
   }
   answerEl.textContent = '';
   if (citationsEl) citationsEl.textContent = '';
+  if (answerModeEl) answerModeEl.textContent = '';
   setLoading(askBtn, true);
   try {
-    const res = await fetch('/ask', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({event_id: lastEventId, query: q}) });
+    const res = await fetch('/ask', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({event_id: lastEventId, query: q, plain_language: plainLanguage}) });
     if (!res.ok) throw new Error('Request failed: ' + res.status);
     const json = await res.json();
-    answerEl.textContent = escapeHtml(json.answer || json.ideas_text || '');
+    answerEl.textContent = json.answer || json.ideas_text || '';
+    if (answerModeEl) {
+      answerModeEl.textContent = json.plain_language
+        ? 'Answered in simple language.'
+        : 'Answered in standard language.';
+    }
     const cites = Array.isArray(json.citations) ? json.citations : [];
     if (citationsEl) {
       if (cites.length === 0) {
@@ -96,7 +103,7 @@ document.getElementById('askBtn')?.addEventListener('click', async () => {
     }
     answerEl.focus();
   } catch (err) {
-    errorEl.textContent = escapeHtml(err.message);
+    errorEl.textContent = err.message;
     errorEl.focus();
   } finally {
     setLoading(askBtn, false);
@@ -129,7 +136,7 @@ document.getElementById('exportBtn')?.addEventListener('click', async () => {
     statusEl.textContent = 'Exported plan.';
     statusEl.focus();
   } catch (err) {
-    errorEl.textContent = escapeHtml(err.message);
+    errorEl.textContent = err.message;
     errorEl.focus();
   } finally {
     setLoading(exportBtn, false);

@@ -3,8 +3,11 @@
 Used to ground personalized ideas in a small, vetted knowledge base.
 Strategy: cached TF-IDF primary, token-overlap fallback (zero-dep safe).
 
-Caching: the corpus + vectorizer + matrix are built once and reused
-(bounded memory, sub-second repeat queries).
+Caching: the corpus + vectorizer + matrix are built once over the FULL
+corpus and reused. Every request only *transforms* the query with the
+cached vectorizer, so the IDF weights stay stable across queries and
+scores are comparable between them. The cache is invalidated when the
+corpus file changes (mtime) or its length changes.
 """
 
 from __future__ import annotations
@@ -95,6 +98,9 @@ def load_corpus() -> list[dict]:
 def _build_index(corpus: list[dict]) -> tuple:
     """Build (vectorizer, matrix) or (None, None) on failure.
 
+    The vectorizer is fitted on the corpus only - never on the query - so
+    the resulting IDF weights depend on the corpus and not on the request.
+
     Args:
         corpus: Corpus entries used as the fitting documents.
 
@@ -103,7 +109,9 @@ def _build_index(corpus: list[dict]) -> tuple:
         is unavailable or fitting fails.
     """
     try:
-        from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
+        from sklearn.feature_extraction.text import (
+            TfidfVectorizer,  # type: ignore[import-untyped]
+        )
 
         docs = [c.get("text", "") for c in corpus]
         vec = TfidfVectorizer(stop_words="english")
@@ -115,6 +123,10 @@ def _build_index(corpus: list[dict]) -> tuple:
 
 def _get_index(corpus: list[dict]) -> tuple:
     """Return cached (vectorizer, matrix, corpus), rebuilding if needed.
+
+    The cache key is the corpus file's modification time plus its length:
+    whenever either changes the index is rebuilt, otherwise the fitted
+    vectorizer and matrix are reused.
 
     Args:
         corpus: Corpus entries the cached index must correspond to.
@@ -187,8 +199,66 @@ def _rank_by_token_overlap(
     return scored[:top_k]
 
 
+def _rank_by_tf_idf(
+    vectorizer: object,
+    matrix: object,
+    indexed: list[dict],
+    query: str,
+    top_k: int,
+    event_type: str | None,
+) -> list[dict]:
+    """Score the cached index against a query and filter by event type.
+
+    The query is only *transformed* with the already-fitted vectorizer, so
+    no model is rebuilt per request and the IDF weights stay stable. The
+    event-type filter is applied to the ranked results, not to the corpus
+    that was fitted, so filtering never changes the scoring scale.
+
+    Args:
+        vectorizer: The fitted ``TfidfVectorizer`` from the cached index.
+        matrix: The fitted sparse document-term matrix from the cached index.
+        indexed: Corpus entries the matrix rows correspond to.
+        query: Free-text query to score against the corpus.
+        top_k: Maximum number of entries to return.
+        event_type: Optional event type filter; entries tagged "all" always
+            match.
+
+    Returns:
+        The best-matching corpus entries, each carrying a "score" key. An
+        empty list when nothing matches.
+    """
+    from sklearn.metrics.pairwise import (
+        cosine_similarity,  # type: ignore[import-untyped]
+    )
+
+    query_vector = vectorizer.transform([query])  # type: ignore[attr-defined]
+    sims = cosine_similarity(query_vector, matrix).flatten()
+    ranked = sorted(
+        zip(indexed, (float(s) for s in sims), strict=False),
+        key=lambda pair: pair[1],
+        reverse=True,
+    )
+    out: list[dict] = []
+    for entry, score in ranked:
+        if score <= 0:
+            continue
+        if event_type and entry.get("event_type") not in (event_type, "all"):
+            continue
+        item = dict(entry)
+        item["score"] = score
+        out.append(item)
+        if len(out) >= top_k:
+            break
+    return out
+
+
 def search(query: str, top_k: int = 5, event_type: str | None = None) -> list[dict]:
     """Return top_k corpus entries most relevant to query. Each has 'score' in (0,1].
+
+    The TF-IDF index is built once over the full corpus and cached; every
+    call only transforms the query, so repeated searches are cheap and the
+    resulting scores are comparable across queries. When scikit-learn is
+    unavailable the token-overlap ranker is used instead.
 
     Args:
         query: Free-text query to match against the corpus.
@@ -203,35 +273,26 @@ def search(query: str, top_k: int = 5, event_type: str | None = None) -> list[di
         # than grounding the answer in incidental word overlap.
         return []
     corpus = load_corpus()
-    if event_type:
-        corpus = [c for c in corpus if c.get("event_type") in (event_type, "all")]
     if not corpus:
         return []
     top_k = max(1, min(top_k, 10))
 
-    try:
-        from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
-        from sklearn.metrics.pairwise import cosine_similarity  # type: ignore[import-untyped]
+    vectorizer, matrix, indexed = _get_index(corpus)
+    if vectorizer is not None and matrix is not None:
+        try:
+            hits = _rank_by_tf_idf(
+                vectorizer, matrix, indexed, query, top_k, event_type,
+            )
+            if hits:
+                return hits
+        except Exception:  # noqa: BLE001, S110
+            pass
 
-        docs = [c.get("text", "") for c in corpus]
-        v = TfidfVectorizer(stop_words="english")
-        m = v.fit_transform(docs + [query])
-        sims = cosine_similarity(m[-1], m[:-1]).flatten()
-        ranked = sorted(enumerate(sims), key=lambda x: x[1], reverse=True)
-        out = []
-        for idx, score in ranked[:top_k]:
-            if score <= 0:
-                continue
-            entry = dict(corpus[idx])
-            entry["score"] = float(score)
-            out.append(entry)
-        if out:
-            return out
-    except Exception:  # noqa: BLE001, S110
-        pass
-
-    # Fallback: token overlap.
-    return _rank_by_token_overlap(corpus, query, top_k)
+    # Fallback: token overlap over the event-type-filtered corpus.
+    filtered = corpus
+    if event_type:
+        filtered = [c for c in corpus if c.get("event_type") in (event_type, "all")]
+    return _rank_by_token_overlap(filtered, query, top_k)
 
 
 def reset_cache() -> None:

@@ -28,10 +28,10 @@ def client() -> Iterator[TestClient]:
     Yields:
         A test client bound to the application.
     """
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
     with TestClient(app) as c:
         yield c
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
 
 
 def _event(**overrides: object) -> dict:
@@ -302,7 +302,7 @@ def test_rate_limit_ignores_forwarded_for_header(
 ) -> None:
     """A spoofed X-Forwarded-For must not create a second bucket."""
     monkeypatch.setattr(settings, "rate_limit_per_min", 1)
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
     first = client.get("/health", headers={"X-Forwarded-For": "1.1.1.1"})
     assert first.status_code == 200
     second = client.get("/health", headers={"X-Forwarded-For": "2.2.2.2"})
@@ -313,15 +313,15 @@ def test_rate_limit_ignores_forwarded_for_header(
 def test_rate_bucket_store_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
     """The bucket store must never grow past its configured cap."""
     monkeypatch.setattr(settings, "max_rate_buckets", 3)
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
     try:
         now = time.time()
         for i in range(10):
-            main_module._RATE_BUCKETS[f"ip-{i}"] = [now]
+            main_module._rate_buckets[f"ip-{i}"] = [now]
         main_module._evict_rate_buckets()
-        assert len(main_module._RATE_BUCKETS) <= 3
+        assert len(main_module._rate_buckets) <= 3
     finally:
-        main_module._RATE_BUCKETS.clear()
+        main_module._rate_buckets.clear()
 
 
 def test_rate_bucket_window_is_sliding(
@@ -329,11 +329,11 @@ def test_rate_bucket_window_is_sliding(
 ) -> None:
     """Timestamps older than the window are dropped from the bucket."""
     monkeypatch.setattr(settings, "rate_limit_per_min", 5)
-    main_module._RATE_BUCKETS.clear()
-    bucket = main_module._RATE_BUCKETS["testclient"] = []
+    main_module._rate_buckets.clear()
+    bucket = main_module._rate_buckets["testclient"] = []
     bucket.extend([time.time() - 3600, time.time() - 120])
     client.get("/health")
-    remaining = main_module._RATE_BUCKETS["testclient"]
+    remaining = main_module._rate_buckets["testclient"]
     assert len(remaining) == 1
     assert remaining[0] > time.time() - 60
 

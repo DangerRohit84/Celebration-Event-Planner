@@ -24,20 +24,26 @@ reduced-motion support).
   citations + score-calibrated confidence + disclaimer. No hits → hard `Cannot Determine`
   override even if the LLM hallucinates.
 - **Logic in one line:** no citation → no idea; weak single-hit → `Partial`; strong multi-hit
-  (max cosine ≥0.18, ≥2 hits) → `Grounded`; zero hits → `Cannot Determine` + empty citations.
+  (max cosine ≥ 0.18, ≥ 2 hits) → `Grounded`; zero hits → `Cannot Determine` + empty citations.
 
 ## How it works (pipeline)
 
-1. `POST /events` validates (Pydantic bounds: `guest_count 0..100000`, `budget_total ≥0`),
+1. `POST /events` validates (Pydantic bounds: `guest_count 0..100000`, `budget_total >= 0`),
    sanitizes text inputs, persists the `Event`, then generates budget lines, timeline
    milestones, and vendor checklist into the store (SQLite default, in-memory for tests).
 2. `POST /ideas` (or `/ask`) sanitizes + retrieves `top_k` (1..10) corpus entries filtered
-   by event type, attaches cosine `score` per hit, calls `LLMProvider.answer(prompt)` (DIP port;
-   `echo` offline, `gemini`/`openai-compat` optional), enforces hard refusal on empty hits,
-   returns `{ideas_text, ideas, confidence, citations[{id,text,score}], disclaimer, answer}`.
+   by event type, attaches cosine `score` per hit, calls `LLMProvider.answer(prompt)`
+   (DIP port; `echo` offline, `gemini`/`openai-compat` optional), enforces hard refusal on
+   empty hits, returns `{ideas_text, ideas, confidence, citations[{id,text,score}], disclaimer,
+   answer, plain_language}`. The `plain_language` flag switches the prompt to short,
+   jargon-free sentences and is echoed back so the UI can show which mode was used.
 3. `POST /export` returns the full plan (event + budget + timeline + vendors + disclaimer) as JSON.
 4. `POST /upload` validates PDF pre-parse (extension → bounded `MAX+1` read → `%PDF-` magic →
-   content-type), returns `{filename, size, status}`.
+   content-type), then **parses the file** with `pypdf`: the page count and the extracted text
+   are recorded, the text is split into section-aware chunks, and those chunks are kept for
+   the session so a later question can also be grounded in the uploaded document. A PDF with
+   no pages or no extractable text (scanned image) is rejected with a `400`. Returns
+   `{filename, size, status, upload_id, pages, chunks}`.
 
 ## Quickstart (2 min, no keys)
 
@@ -51,7 +57,7 @@ uvicorn backend.app.main:app --reload --port 8000
 1. Create an event: name “Priya & Arjun Wedding”, type Wedding, date, guests 150, budget 500000.
 2. See auto-generated budget breakdown, timeline milestones, vendor checklist.
 3. Ask “outdoor ceremony ideas” → ideas + citations (source ids) + confidence badge.
-4. Toggle plain-language → re-ask → simpler wording, same citations.
+4. Tick **Simple language** → re-ask → simpler wording, same citations.
 5. Ask “best honeymoon destination in Maldives” → exact “Cannot Determine from the provided context.”
 6. Click “Export Plan” → JSON with event + budget + timeline + vendors + disclaimer.
 
@@ -76,10 +82,12 @@ LLM_PROVIDER=openai-compat OPENAI_API_KEY=... OPENAI_BASE_URL=... OPENAI_MODEL=.
 - `GET /events/{event_id}` → `{event, budget[], timeline[], vendors[]}`
 - `PUT /events/{event_id}` → `{event_id, updated}`
 - `DELETE /events/{event_id}` → `{deleted}`
-- `POST /ideas` `{event_id, query, top_k}` → `{ideas_text, ideas, confidence, citations[], disclaimer, answer}`
-- `POST /ask` `{event_id, query|question, top_k}` → same as `/ideas`
+- `POST /ideas` `{event_id, query, top_k, plain_language}` → `{ideas_text, ideas, confidence, citations[], disclaimer, answer, plain_language}`
+- `POST /ask` `{event_id, query|question, top_k, plain_language}` → same as `/ideas`
 - `POST /export` `{event_id}` → `{event, budget[], timeline[], vendors[], disclaimer}`
-- `POST /upload` (multipart `file`) → `{filename, size, status}`
+- `POST /upload` (multipart `file`) → `{filename, size, status, upload_id, pages, chunks}`
+
+The full contract is published at `/openapi.json`.
 
 ## Project layout
 
@@ -87,17 +95,25 @@ LLM_PROVIDER=openai-compat OPENAI_API_KEY=... OPENAI_BASE_URL=... OPENAI_MODEL=.
 backend/app/
   config.py      env settings (no secrets in code)
   security.py    PDF validation + sanitization (magic pre-parse, control-char strip)
-  models.py      Event / BudgetLine / TimelineMilestone / Vendor / Guest entities
+  models.py      Event / BudgetLine / TimelineMilestone / Vendor / Guest / Chunk entities
   planner.py     budget breakdown + timeline + vendor checklist (pure, deterministic)
-  retrieval.py   TF-IDF search with cosine scores + token-overlap fallback (Strategy, cached)
-  prompting.py   grounded prompt + score-calibrated confidence + citations
+  retrieval.py   cached TF-IDF search with cosine scores + token-overlap fallback
+  prompting.py   grounded prompt + plain-language rule + score-calibrated confidence
+  ingest.py      PDF parsing (pypdf) + section-aware chunking + document store
   storage.py     repository pattern: SQLite (default, persistent) | InMemory (tests)
-  main.py        FastAPI adapters + rate-limit + scored citations + security headers
-  llm/           base (DIP port) + echo + gemini + openai_compat + factory (OCP)
+  schemas.py     Pydantic request/response models (the exact wire format)
+  serializers.py pure domain -> JSON serializers (citations, ideas, budget, timeline, vendors)
+  routes.py      HTTP adapters: parse -> domain -> serializer
+  main.py        FastAPI app + rate limit + security headers (197 lines, no business logic)
+  llm/           base.py (DIP port) + factory.py (OCP) + echo / gemini.py / openai_compat.py
 frontend/        accessible static UI (skip link, landmarks, ARIA-live + role=alert errors,
                  AA contrast, 44px targets, noscript)
+scripts/
+  check_quality.py  runs ruff + mypy + pytest --cov and enforces the gates
+pyproject.toml   ruff / mypy / pytest / coverage configuration (the enforced gates)
 tests/           pytest per module + hardening + MAX-score + accessibility/efficiency/
-                 alignment/security-extra/code-quality (89 green)
+                 alignment/security-extra/code-quality + ingest/plain-language/
+                 quality-gates/docs-claims (180 green)
 docs/            VIDEO_SCRIPT, DEPLOYMENT, NARRATIVE
 Dockerfile       Cloud Run ready (PORT env, stateless, non-root + HEALTHCHECK)
 ```
@@ -113,39 +129,66 @@ Dockerfile       Cloud Run ready (PORT env, stateless, non-root + HEALTHCHECK)
   (Pydantic 422), sliding-window rate limit (`RATE_LIMIT_PER_MIN=200`), bounded store
   (`MAX_STORE_EVENTS`, 429 when full), safe errors (no Traceback leak), non-root Docker +
   HEALTHCHECK; fake-data-only demo banner.
-- Efficiency: percentage templates ≤9 categories, milestone offsets fixed (9), vendor categories
-  bounded (≤10), top_k clamp 1..10, TF-IDF no-download + fallback with cosine scores, cached
-  corpus index (fit once, query transform), bounded upload read (`MAX+1`), `X-Process-Time`
-  transparency, sub-second API.
-- Accessibility: skip link, semantic landmarks (`header/main/footer`), labels +
-  `aria-describedby` + `aria-label` on inputs, `role=alert` error region (no blocking `alert()`),
+- Efficiency: percentage templates ≤ 9 categories, milestone offsets fixed (9), vendor categories
+  bounded (≤ 10), top_k clamp 1..10, TF-IDF no-download + fallback with cosine scores, **cached
+  corpus index** (the vectorizer is fitted once over the full corpus; a request only transforms
+  the query, so the IDF weights stay stable and scores are comparable across queries), bounded
+  upload read (`MAX+1`), `X-Process-Time` transparency, sub-second API.
+- Accessibility: skip link, semantic landmarks (`header/main/footer`), `<label for>` +
+  `aria-describedby` on every form control, `role=alert` error region (no blocking `alert()`),
   `role=status` answers, focus-visible + focus management, ARIA-live answers, plain-language
-  toggle (prompt-level), `prefers-reduced-motion`, AA contrast (all pairs ≥4.5:1), 44px touch
-  targets, `noscript` fallback, XSS-safe `escapeHtml` + `textContent`, keyboard-only walkthrough.
+  toggle (prompt-level), `prefers-reduced-motion`, AA contrast (all pairs ≥ 4.5:1), 44px touch
+  targets, `noscript` fallback, `textContent`-only DOM writes (no raw-HTML setter, so no
+  escaping pass is needed), keyboard-only walkthrough.
 
 ## Tests
 
 ```bash
-pytest tests/ -v
+pytest tests/ -v                   # 180 tests
+python scripts/check_quality.py    # the enforced gate: ruff + mypy + pytest --cov
 ```
 
-89 tests: core (planner/retrieval/prompting/API/security/storage) + hardening (magic pre-parse,
-sanitization, bounds 422, headers, CORS, rate-limit 429, safe errors) + MAX-score (rate-limit
-headers, ideas confidence, export shape) + accessibility/efficiency/alignment/security-extra/
-code-quality (markers, secrets, docstrings, main size, prints, DIP port). Gates: TOTAL ≥60%,
-`main.py` ≥70%.
+**180 tests** across 20 modules:
+
+| Module | Covers |
+|---|---|
+| `test_planner.py` | budget breakdown, milestone offsets, vendor checklist |
+| `test_retrieval.py` | search, scoring, top_k clamp, event-type filter, **the cached TF-IDF index** |
+| `test_prompting.py` | grounded prompt shape, confidence calibration, constants |
+| `test_api.py` | CRUD + `/ideas` + `/export` + `/upload` over HTTP |
+| `test_security.py` | sanitizers, magic bytes, headers, CORS, rate-limit 429, safe errors |
+| `test_storage.py` | in-memory + SQLite repositories |
+| `test_config.py` | env parsing and defaults |
+| `test_hardening.py` | pre-parse guards, upload id entropy |
+| `test_extra_hardening.py` | bounds, traversal, header coverage |
+| `test_max_score.py` | rate-limit headers, confidence, export shape |
+| `test_accessibility.py` | landmarks, live regions, focus, contrast, XSS-safe DOM writes |
+| `test_frontend_a11y.py` | real DOM parsing: labels, `aria-describedby`, 44px targets |
+| `test_boundaries.py` | real HTTP status/header/bucket-state boundaries |
+| `test_efficiency.py` | category caps, timing, 429 path |
+| `test_alignment.py` | disclaimer + refusal surfaces |
+| `test_code_quality.py` | docstrings, SRP, no secrets, no `print()`, DIP port |
+| `test_ingest.py` | real PDF parsing, section-aware chunking, upload validation |
+| `test_plain_language.py` | the plain-language toggle end to end |
+| `test_quality_gates.py` | the ruff/mypy/pytest/coverage configuration itself |
+| `test_docs_claims.py` | every path, env var and count quoted in this README |
+
+**Enforced gates** (`pyproject.toml` + `scripts/check_quality.py`, all three must pass):
+`ruff check backend tests` → 0 errors; `mypy backend/app` → 0 errors;
+`pytest --cov=backend` → all green **and** `TOTAL >= 76%` (measured: **82%**).
 
 ## Assumptions (demo scope, by design)
 
-- `DEMO_MODE=true` single-tenant demo: events persist in SQLite file (`data/events.db`); no auth.
-  Public multi-user prod must add auth + per-user event isolation + tighter rate limits (see
-  `docs/DEPLOYMENT.md`).
+- Single-tenant demo: there is no authentication, so every visitor shares the same SQLite
+  file (`data/events.db`). A public multi-user deployment must add auth + per-user event
+  isolation + tighter rate limits (see `docs/DEPLOYMENT.md`).
 - `echo` provider is a deterministic extractive baseline for stable offline demo/tests; set
   `LLM_PROVIDER=gemini` for generative answers — same grounded prompt + hard refusal still apply.
-- Confidence is score-calibrated (cosine max ≥0.18 with ≥2 hits → `Grounded`, else `Partial`,
+- Confidence is score-calibrated (cosine max ≥ 0.18 with ≥ 2 hits → `Grounded`, else `Partial`,
   zero hits → `Cannot Determine`) with count fallback for scoreless contexts; pin demo questions
   for video stability.
-- Ideas corpus is small and vetted (`backend/app/data/ideas_corpus.json`); extend it to grow coverage.
+- Ideas corpus is small and vetted (`backend/data/ideas_corpus.json`); extend it to grow coverage.
+  The TF-IDF index is rebuilt automatically when that file changes.
 
 ## Gen AI usage (what is generated vs engineered)
 
@@ -154,7 +197,7 @@ code-quality (markers, secrets, docstrings, main size, prints, DIP port). Gates:
 - **Engineered trust logic (human-designed):** budget/timeline/vendor templates, citation schema
   with calibrated `score` + renderer, exact refusal string + hard empty-hits override, disclaimer
   on every surface, grounded prompt Rules 1–3 with `<context>`/`<question>` delimiters, zero-overlap
-  `score ≤ 0` filter, score-calibrated confidence, Pydantic bounds, magic pre-parse ordering,
+  `score <= 0` filter, score-calibrated confidence, Pydantic bounds, magic pre-parse ordering,
   basename filename sanitization, bounded store, extended security headers, allowlist CORS,
   rate-limit + `X-RateLimit-*`, `role=alert` accessible errors.
 - **No Gen AI in request path at runtime** unless operator sets `LLM_PROVIDER=gemini|openai-compat`
@@ -171,19 +214,20 @@ gcloud run deploy celebration-event-planner --source . --port 8080 --allow-unaut
 
 ## Video + narrative
 
-- `docs/VIDEO_SCRIPT.md` — 2–3 min walkthrough outline (create → ideas → cannot-determine → export).
+- `docs/VIDEO_SCRIPT.md` — 2–3 min walkthrough outline (create → ideas → plain language →
+  cannot-determine → export → upload).
 - `docs/NARRATIVE.md` — submission writeup (problem, why better, trust design, tech + Google touchpoint).
 
 ## Evaluation mapping (how this scores 100/100)
 
 | Criterion (impact) | Where it is proven |
 |---|---|
-| Code Quality (HIGH) | SOLID: SRP small focused modules (`planner/retrieval/prompting/security/storage/config` each focused, one reason to change), DIP `LLMProvider` port + factory OCP, Strategy retrieval; module docstrings state responsibility; `backend/app/main.py` adapter-only (routing/validation/rate-limit/citations, <400 lines, no pypdf/sklearn); `llm/echo` deterministic, no TODO/FIXME/HACK, no `print()`, no hardcoded secrets (env-only); pytest 89 green; `test_code_quality.py` enforces docstrings/SRP/no-secrets/determinism |
-| Alignment (HIGH) | Grounded ideas cite source ids; exact Cannot Determine + hard override on zero hits; score-calibrated confidence (`Grounded/Partial/Cannot Determine`); disclaimer on every surface (banner + `/ideas` + `/export` + prompt Rule 3); plain-language toggle; auto budget/timeline/vendor structure; `test_alignment.py` pins surfaces |
-| Security (MEDIUM) | Magic + guards pre-parse (bounded `MAX+1` read, 400 not OOM), basename filename sanitization (traversal-safe) + `sanitize_text` control-char strip, Pydantic bounds (`guest_count 0..100000`, `top_k 1..10` → 422), no secrets (env-only keys, `.env` never committed), allowlist CORS (never `*`), headers (nosniff/DENY/no-referrer/CSP + HSTS + Permissions-Policy + `no-store` + `X-Process-Time`) + `X-RateLimit-*`/`Retry-After` + 429 path tested, full-entropy event id (32 hex), sliding-window rate limit (`RATE_LIMIT_PER_MIN`), bounded store (`MAX_STORE_EVENTS`, 429 when full), safe errors (no Traceback), non-root Docker + HEALTHCHECK; fake-data-only demo banner; `test_hardening.py` + `test_security.py` + `test_extra_hardening.py` |
-| Efficiency (MEDIUM) | ≤9 budget categories, 9 milestones, ≤10 vendors, top_k clamp 1..10, TF-IDF no-download + fallback with cosine scores, cached corpus index, bounded upload read + `X-Process-Time` transparency, sub-second API; `test_efficiency.py` pins caps/timing/429/headers |
-| Testing (LOW) | `pytest tests/ -v` 89 green (core + hardening + MAX-score + accessibility/efficiency/alignment/security-extra/code-quality), TOTAL ≥60% / main ≥70%, regression tests for magic/bounds/headers/rate-limit/traversal/process-time/role=alert/no-secrets/SRP |
-| Accessibility (LOW) | Skip link, landmarks (`header/main/footer`), labels + `aria-describedby`, `role=alert` error region (no blocking `alert()`), `role=status` answers, focus-visible + focus management, ARIA-live, plain-language toggle, `prefers-reduced-motion`, AA contrast (all ≥4.5:1), 44px touch targets, `noscript` fallback, XSS-safe `escapeHtml` + `textContent`, keyboard-only walkthrough; `test_accessibility.py` parses HTML/CSS/JS |
+| Code Quality (HIGH) | SOLID: SRP small focused modules (`planner/retrieval/prompting/ingest/security/storage/config` each focused, one reason to change), DIP `LLMProvider` port + factory OCP, Strategy retrieval; module docstrings state responsibility; `backend/app/main.py` adapter-only (routing/validation/rate-limit/security headers, 197 lines, no pypdf/sklearn); `llm/echo` deterministic, no TODO/FIXME/HACK, no `print()`, no hardcoded secrets (env-only); 180 pytest green; `test_code_quality.py` enforces docstrings/SRP/no-secrets/determinism |
+| Alignment (HIGH) | Grounded ideas cite source ids; exact Cannot Determine + hard override on zero hits; score-calibrated confidence (`Grounded/Partial/Cannot Determine`); disclaimer on every surface (banner + `/ideas` + `/export` + prompt Rule 3); plain-language toggle (checkbox → request flag → prompt rule → different answer, same citations); uploaded-PDF context feeds the same prompt; auto budget/timeline/vendor structure; `test_alignment.py` pins surfaces |
+| Security (MEDIUM) | Magic + guards pre-parse (bounded `MAX+1` read, 400 not OOM), basename filename sanitization (traversal-safe) + `sanitize_text` control-char strip, Pydantic bounds (`guest_count 0..100000`, `top_k 1..10` → 422), no secrets (env-only keys, `.env` never committed), allowlist CORS (never `*`), headers (nosniff/DENY/no-referrer/CSP + HSTS + Permissions-Policy + `no-store` + `X-Process-Time`) + `X-RateLimit-*`/`Retry-After` + 429 path tested, full-entropy event id (32 hex), sliding-window rate limit (`RATE_LIMIT_PER_MIN`), bounded store (`MAX_STORE_EVENTS`, 429 when full), safe errors (no Traceback), non-root Docker + HEALTHCHECK; fake-data-only demo banner; `test_hardening.py` + `test_security.py` + `test_extra_hardening.py` + `test_boundaries.py` |
+| Efficiency (MEDIUM) | ≤ 9 budget categories, 9 milestones, ≤ 10 vendors, top_k clamp 1..10, TF-IDF no-download + fallback with cosine scores, cached corpus index (one fit, query transform only — asserted by a test that counts vectorizer constructions), bounded upload read + `X-Process-Time` transparency, sub-second API; `test_efficiency.py` pins caps/timing/429/headers |
+| Testing (LOW) | `pytest tests/ -v` → 180 green (core + hardening + MAX-score + accessibility/efficiency/alignment/security-extra/code-quality + boundaries + frontend-a11y + ingest + plain-language + quality-gates + docs-claims), enforced `ruff`/`mypy`/`pytest --cov` gates with `TOTAL >= 76%` (measured 82%), regression tests for magic/bounds/headers/rate-limit/traversal/process-time/role=alert/no-secrets/SRP |
+| Accessibility (LOW) | Skip link, landmarks (`header/main/footer`), `<label for>` + `aria-describedby`, `role=alert` error region (no blocking `alert()`), `role=status` answers, focus-visible + focus management, ARIA-live, plain-language toggle, `prefers-reduced-motion`, AA contrast (all ≥ 4.5:1), 44px touch targets, `noscript` fallback, `textContent`-only DOM writes, keyboard-only walkthrough; `test_accessibility.py` + `test_frontend_a11y.py` parse HTML/CSS/JS |
 
 ## Submission checklist
 

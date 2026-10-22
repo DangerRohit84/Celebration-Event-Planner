@@ -12,7 +12,7 @@ Record real app, no slides. Show URL bar at start (proves Live URL).
 
 0:45–1:20 — Personalized ideas (grounded)
 - Ask "outdoor ceremony ideas" → show ideas + citations (source ids) + confidence badge (Grounded/Partial).
-- Toggle plain-language → re-ask → simpler wording, same citations.
+- Tick "Simple language" → re-ask → simpler wording, same citations, and the answer panel shows "Answered in simple language."
 
 1:20–1:45 — Cannot Determine (trust moment — do not skip)
 - Ask something NOT in corpus (e.g. "best honeymoon destination in Maldives").
@@ -21,9 +21,10 @@ Record real app, no slides. Show URL bar at start (proves Live URL).
 1:45–2:15 — Export
 - Click "Export Plan" → show JSON with event + budget + timeline + vendors + disclaimer.
 
-2:15–2:40 — Upload guard (security)
-- Upload a non-PDF → show 400 "PDF only" error in role=alert region (no blocking alert()).
-- Upload oversized file → 413.
+2:15–2:40 — Upload (security + real parsing)
+- Upload a real PDF → show the response with `pages` and `chunks` (the file is really parsed).
+- Upload a non-PDF → show the 400 error in the role=alert region (no blocking alert()).
+- Upload an oversized file → 413.
 
 2:40–3:00 — Close + stack
 - "LLM-agnostic: offline echo by default, Gemini/OpenAI toggle. SQLite store, FastAPI, deploys anywhere incl. Cloud Run."
@@ -44,6 +45,6 @@ Cannot Determine (expect exact refusal + Cannot Determine badge):
 - "stock market tips for 2026"
 
 Plain-language toggle demo:
-- Re-ask "outdoor ceremony ideas" with plain language on → simpler wording, same citations.
+- Re-ask "outdoor ceremony ideas" with "Simple language" ticked → simpler wording, same citations.
 
 Checklist: 1080p, captions on, no API keys visible, sample data is fake/redacted.

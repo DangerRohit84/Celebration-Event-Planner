@@ -11,10 +11,10 @@ from backend.app.main import app
 
 @pytest.fixture()
 def client():
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
     with TestClient(app) as c:
         yield c
-    main_module._RATE_BUCKETS.clear()
+    main_module._rate_buckets.clear()
 
 
 def test_health_fast(client):
