@@ -6,8 +6,15 @@
 # parser are all part of the shipped behaviour.
 
 # Core runtime
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
+fastapi==0.159.1
+# starlette + the three entries below are direct requirements of fastapi
+# 0.159.1; they are pinned so the deployed environment matches the
+# pip-audited freeze exactly (reproducible deploy).
+starlette==1.7.0  # pinned: security advisory fix (PYSEC-2026-1943/1941/161/2281/2280/249/248)
+typing-inspection==0.4.4
+annotated-doc==0.0.5
+opentelemetry-api==1.45.1
+uvicorn[standard]==0.54.0
 pydantic==2.9.2
 python-multipart==0.0.32
 python-dotenv==1.2.4
@@ -22,7 +29,7 @@ numpy==2.1.2
 # LLM providers (imported lazily; LLM_PROVIDER=echo needs neither)
 google-genai==1.0.0
 openai==1.51.0
-httpx==0.27.2
+httpx==0.28.1
 
 # Testing + quality gate (scripts/check_quality.py)
 pytest==9.1.1
