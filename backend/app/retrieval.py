@@ -24,25 +24,58 @@ _cache_lock = threading.Lock()
 _cached: dict = {"corpus": None, "vectorizer": None, "matrix": None, "mtime": None}
 
 # Fallback English stop-word set, used when scikit-learn is unavailable.
-# The set mirrors the words sklearn removes, so the "no signal" guard below
-# behaves identically in both environments.
+#
+# This is the COMPLETE scikit-learn `ENGLISH_STOP_WORDS` list (318 entries),
+# copied verbatim so that a scikit-learn-free deployment removes exactly the
+# same words as the TF-IDF path. Both the list and the retrieval behaviour it
+# guards are therefore identical in the two environments - the "no signal"
+# guard below and the token-overlap fallback below agree with
+# `TfidfVectorizer(stop_words="english")` token for token.
+#
+# `tests/test_retrieval.py::test_fallback_stop_words_match_sklearn` pins this
+# equality against the installed scikit-learn, so the copy cannot silently
+# drift away from the upstream list.
 _FALLBACK_STOP_WORDS = frozenset(
     {
-        "a", "about", "above", "after", "again", "against", "all", "am", "an",
-        "and", "any", "are", "as", "at", "be", "because", "been", "before",
-        "being", "below", "between", "both", "but", "by", "can", "could",
-        "did", "do", "does", "doing", "down", "during", "each", "few", "for",
-        "from", "further", "had", "has", "have", "having", "he", "her", "here",
-        "hers", "him", "his", "how", "i", "if", "in", "into", "is", "it",
-        "its", "itself", "just", "me", "more", "most", "my", "no", "nor",
-        "not", "now", "of", "off", "on", "once", "only", "or", "other", "our",
-        "ours", "out", "over", "own", "same", "she", "should", "so", "some",
-        "such", "than", "that", "the", "their", "theirs", "them", "then",
-        "there", "these", "they", "this", "those", "through", "to", "too",
-        "under", "until", "up", "very", "was", "we", "were", "what", "when",
-        "where", "which", "while", "who", "whom", "why", "will", "with",
-        "would", "you", "your", "yours",
-    },
+        "a", "about", "above", "across", "after", "afterwards", "again", "against",
+        "all", "almost", "alone", "along", "already", "also", "although", "always",
+        "am", "among", "amongst", "amoungst", "amount", "an", "and", "another", "any",
+        "anyhow", "anyone", "anything", "anyway", "anywhere", "are", "around", "as",
+        "at", "back", "be", "became", "because", "become", "becomes", "becoming",
+        "been", "before", "beforehand", "behind", "being", "below", "beside",
+        "besides", "between", "beyond", "bill", "both", "bottom", "but", "by", "call",
+        "can", "cannot", "cant", "co", "con", "could", "couldnt", "cry", "de",
+        "describe", "detail", "do", "done", "down", "due", "during", "each", "eg",
+        "eight", "either", "eleven", "else", "elsewhere", "empty", "enough", "etc",
+        "even", "ever", "every", "everyone", "everything", "everywhere", "except",
+        "few", "fifteen", "fifty", "fill", "find", "fire", "first", "five", "for",
+        "former", "formerly", "forty", "found", "four", "from", "front", "full",
+        "further", "get", "give", "go", "had", "has", "hasnt", "have", "he", "hence",
+        "her", "here", "hereafter", "hereby", "herein", "hereupon", "hers", "herself",
+        "him", "himself", "his", "how", "however", "hundred", "i", "ie", "if", "in",
+        "inc", "indeed", "interest", "into", "is", "it", "its", "itself", "keep",
+        "last", "latter", "latterly", "least", "less", "ltd", "made", "many", "may",
+        "me", "meanwhile", "might", "mill", "mine", "more", "moreover", "most",
+        "mostly", "move", "much", "must", "my", "myself", "name", "namely", "neither",
+        "never", "nevertheless", "next", "nine", "no", "nobody", "none", "noone",
+        "nor", "not", "nothing", "now", "nowhere", "of", "off", "often", "on", "once",
+        "one", "only", "onto", "or", "other", "others", "otherwise", "our", "ours",
+        "ourselves", "out", "over", "own", "part", "per", "perhaps", "please", "put",
+        "rather", "re", "same", "see", "seem", "seemed", "seeming", "seems", "serious",
+        "several", "she", "should", "show", "side", "since", "sincere", "six", "sixty",
+        "so", "some", "somehow", "someone", "something", "sometime", "sometimes",
+        "somewhere", "still", "such", "system", "take", "ten", "than", "that", "the",
+        "their", "them", "themselves", "then", "thence", "there", "thereafter",
+        "thereby", "therefore", "therein", "thereupon", "these", "they", "thick",
+        "thin", "third", "this", "those", "though", "three", "through", "throughout",
+        "thru", "thus", "to", "together", "too", "top", "toward", "towards", "twelve",
+        "twenty", "two", "un", "under", "until", "up", "upon", "us", "very", "via",
+        "was", "we", "well", "were", "what", "whatever", "when", "whence", "whenever",
+        "where", "whereafter", "whereas", "whereby", "wherein", "whereupon",
+        "wherever", "whether", "which", "while", "whither", "who", "whoever", "whole",
+        "whom", "whose", "why", "will", "with", "within", "without", "would", "yet",
+        "you", "your", "yours", "yourself", "yourselves",
+    }
 )
 
 _stop_words_cache: frozenset[str] | None = None
@@ -53,7 +86,8 @@ def _stop_words() -> frozenset[str]:
 
     Returns:
         sklearn's English stop words when scikit-learn is installed, else the
-        built-in fallback set.
+        built-in fallback set. The two sets are identical, so the signal
+        guard and the token-overlap ranker behave the same either way.
     """
     global _stop_words_cache
     if _stop_words_cache is None:
