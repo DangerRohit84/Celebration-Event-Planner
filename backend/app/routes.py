@@ -218,7 +218,7 @@ def export_event(payload: ExportRequest, request: Request) -> dict:
 
 
 @router.post("/upload")
-async def upload(request: Request, file: UploadFile = File(...)):  # noqa: B008
+async def upload(request: Request, file: UploadFile = File(...)) -> dict:  # noqa: B008
     """Upload a PDF document."""
     raw = await file.read(settings.max_upload_bytes + 1)
     if len(raw) > settings.max_upload_bytes:

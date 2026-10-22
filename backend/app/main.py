@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
@@ -49,7 +49,7 @@ def _rate_limit(request: Request) -> None:
 
 
 @app.middleware("http")
-async def security_headers(request: Request, call_next):
+async def security_headers(request: Request, call_next) -> Response:
     """Attach security headers and rate-limit info to responses."""
     start = time.perf_counter()
     try:
