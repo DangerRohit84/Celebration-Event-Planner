@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -39,38 +39,44 @@
 
         <div class="field">
           <label for="event_type">Type</label>
-          <select id="event_type" name="event_type">
+          <select id="event_type" name="event_type" aria-describedby="eventTypeHint">
             <option value="wedding">Wedding</option>
             <option value="birthday">Birthday</option>
             <option value="community">Community</option>
             <option value="corporate">Corporate</option>
             <option value="other">Other</option>
           </select>
+          <span id="eventTypeHint" class="hint">Wedding, birthday, community, corporate, or other.</span>
         </div>
 
         <div class="field">
           <label for="event_date">Date</label>
-          <input id="event_date" name="event_date" type="date" required aria-required="true" autocomplete="bday" />
+          <input id="event_date" name="event_date" type="date" required aria-required="true" autocomplete="bday" aria-describedby="eventDateHint" />
+          <span id="eventDateHint" class="hint">YYYY-MM-DD. Used to build your timeline.</span>
         </div>
 
         <div class="field">
           <label for="guest_count">Guests</label>
-          <input id="guest_count" name="guest_count" type="number" min="0" placeholder="0" autocomplete="off" />
+          <input id="guest_count" name="guest_count" type="number" min="0" max="100000" placeholder="0" autocomplete="off" aria-describedby="guestCountHint" />
+          <span id="guestCountHint" class="hint">0 to 100,000 guests.</span>
         </div>
 
         <div class="field">
           <label for="budget_total">Budget</label>
-          <input id="budget_total" name="budget_total" type="number" min="0" step="0.01" placeholder="0.00" autocomplete="off" />
+          <input id="budget_total" name="budget_total" type="number" min="0" step="0.01" placeholder="0.00" autocomplete="off" aria-describedby="budgetHint" />
+          <span id="budgetHint" class="hint">Total budget in your currency. 0 is allowed.</span>
         </div>
 
         <div class="field">
           <label for="theme">Theme</label>
-          <input id="theme" name="theme" type="text" placeholder="e.g. garden, rustic" autocomplete="off" />
+          <input id="theme" name="theme" type="text" placeholder="e.g. garden, rustic" autocomplete="off" aria-describedby="themeHint" />
+          <span id="themeHint" class="hint">Optional. e.g. garden, rustic, neon.</span>
         </div>
 
         <div class="field field-wide">
           <label for="location">Location</label>
-          <input id="location" name="location" type="text" placeholder="City or venue" autocomplete="address-level2" />
+          <input id="location" name="location" type="text" placeholder="City or venue" autocomplete="address-level2" aria-describedby="locationHint" />
+          <span id="locationHint" class="hint">Optional. City or venue name.</span>
         </div>
 
         <div class="actions">
@@ -95,8 +101,8 @@
         </div>
         <button type="button" id="askBtn" class="btn btn-primary">Ask</button>
       </div>
-      <div id="answer" tabindex="-1" class="answer"></div>
-      <div id="citations" aria-live="polite" class="citations"></div>
+      <div id="answer" role="status" aria-live="polite" tabindex="-1" class="answer"></div>
+      <div id="citations" role="status" aria-live="polite" class="citations"></div>
     </section>
   </main>
   <footer role="contentinfo" class="site-footer">

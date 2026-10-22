@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import overload
 
 from .config import settings
 
@@ -76,51 +76,106 @@ def validate_pdf_magic(raw_bytes: bytes | bytearray) -> bool:
     return True
 
 
-def validate_pre_parse(*args: Any, **kwargs: Any) -> bool:
+@overload
+def validate_pre_parse(  # noqa: D418 - every function needs a docstring here
+    filename: str, content_type: str, size: int, data: bytes, /,
+) -> bool:
+    """Validate an upload given its filename, content type, size, and bytes.
+
+    Args:
+        filename: Name of the uploaded file.
+        content_type: MIME type reported for the upload.
+        size: Declared size of the upload in bytes.
+        data: Raw bytes of the upload.
+
+    Returns:
+        True when the upload passes every pre-parse guard.
+    """
+
+
+@overload
+def validate_pre_parse(  # noqa: D418 - every function needs a docstring here
+    data: bytes, filename: str, content_type: str, /,
+) -> bool:
+    """Validate an upload given its bytes, filename, and content type.
+
+    Args:
+        data: Raw bytes of the upload; the size is derived from them.
+        filename: Name of the uploaded file.
+        content_type: MIME type reported for the upload.
+
+    Returns:
+        True when the upload passes every pre-parse guard.
+    """
+
+
+def validate_pre_parse(
+    first: str | bytes,
+    second: str,
+    third: int | str,
+    data: bytes | None = None,
+    /,
+) -> bool:
     """Validate an upload before parsing (single canonical style).
 
     Canonical style: validate_pre_parse(filename, content_type, size_bytes, data).
     Legacy celebration style: validate_pre_parse(data, filename, content_type).
 
+    The two call shapes are distinguished at runtime by the type of the first
+    argument, so the public API stays fully typed without ``*args`` or
+    ``**kwargs``.
+
     Args:
-        *args: Positional arguments in either the canonical or legacy order.
-        **kwargs: Keyword fallbacks for filename, content_type, size, and data.
+        first: The filename for the canonical style, or the raw file bytes for
+            the legacy style.
+        second: The content type for the canonical style, or the filename for
+            the legacy style.
+        third: The byte size for the canonical style, or the content type for
+            the legacy style.
+        data: The raw file bytes for the canonical style; unused in the
+            legacy style, where the size is derived from the bytes.
 
     Returns:
         True when the upload passes every pre-parse guard.
 
     Raises:
+        TypeError: When the arguments do not match either supported call
+            shape.
         ValueError: When the filename, size, content type, or magic bytes fail
             validation.
     """
-    # Resolve arguments (support both call styles).
-    if len(args) == 4:
-        filename, content_type, size, raw_bytes = args
-    elif len(args) == 3 and isinstance(args[0], (bytes, bytearray)):
-        raw_bytes, filename, content_type = args
-        size = len(raw_bytes)
-    elif len(args) == 3:
-        filename, content_type, size = args
-        raw_bytes = kwargs.get("data") or kwargs.get("raw_bytes") or b""
+    if isinstance(first, (bytes, bytearray)):
+        # Legacy style: (data, filename, content_type).
+        if data is not None:
+            raise TypeError(
+                "validate_pre_parse() accepts either "
+                "(filename, content_type, size, data) "
+                "or (data, filename, content_type)",
+            )
+        raw_bytes = bytes(first)
+        filename = second
+        content_type = str(third)
+        size: int | str = len(raw_bytes)
     else:
-        filename = kwargs.get("filename", "")
-        content_type = kwargs.get("content_type", "application/pdf")
-        size = kwargs.get("size")
-        raw_bytes = kwargs.get("raw_bytes") or kwargs.get("data") or b""
+        # Canonical style: (filename, content_type, size, data).
+        if data is None:
+            raise TypeError(
+                "validate_pre_parse() requires the file bytes: "
+                "call it as (filename, content_type, size, data)",
+            )
+        filename = first
+        content_type = second
+        size = third
+        raw_bytes = bytes(data)
 
-    if not isinstance(raw_bytes, (bytes, bytearray)):
-        raw_bytes = b""
-    raw_bytes = bytes(raw_bytes)
-    if size is None:
-        size = len(raw_bytes)
     try:
-        size = int(size)  # type: ignore[call-overload]
+        size = int(str(size))
     except (TypeError, ValueError):
         size = len(raw_bytes)
 
     if not filename or not str(filename).lower().endswith(".pdf"):
         raise ValueError("PDF only: file must end with .pdf")
-    if size is None or size <= 0:
+    if size <= 0:
         raise ValueError("Empty file: upload a valid PDF")
     if size > settings.max_upload_bytes:
         raise ValueError("File too large: max 10 MB")

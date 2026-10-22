@@ -1,11 +1,17 @@
-"""API routes for the Celebration & Event Planner."""
+"""API routes for the Celebration & Event Planner.
+
+Thin Interface Adapters: each handler parses the request, calls the domain,
+and returns the domain result through a serializer. All business rules live
+in planner.py / retrieval.py / prompting.py / storage.py.
+"""
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 
 from .config import settings
@@ -17,11 +23,37 @@ from .prompting import (
     DISCLAIMER,
     build_ideas_prompt,
     calibrate_confidence,
+    render_grounded_ideas,
 )
 from .retrieval import search as retrieve_ideas
-from .schemas import AskRequest, EventCreate, EventUpdate, ExportRequest, IdeasRequest
+from .schemas import (
+    AskRequest,
+    EventCreate,
+    EventCreatedResponse,
+    EventDeletedResponse,
+    EventDetailResponse,
+    EventSummaryResponse,
+    EventUpdate,
+    EventUpdatedResponse,
+    ExportRequest,
+    ExportResponse,
+    HealthResponse,
+    IdeasRequest,
+    IdeasResponse,
+    UploadResponse,
+)
 from .security import sanitize_filename, sanitize_text, validate_pre_parse
+from .serializers import (
+    budget_line_dict,
+    event_detail,
+    event_plan_dict,
+    event_summary,
+    milestone_dict,
+    vendor_dict,
+)
 from .storage import CapacityError, get_store, new_id
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -41,7 +73,7 @@ def _parse_event_type(value: str) -> EventType:
         return EventType.OTHER
 
 
-@router.get("/health")
+@router.get("/health", response_model=HealthResponse)
 def health() -> dict:
     """Health check endpoint.
 
@@ -67,13 +99,12 @@ def index() -> HTMLResponse:
     return HTMLResponse("<h1>Celebration & Event Planner</h1>")
 
 
-@router.post("/events")
-def create_event(payload: EventCreate, request: Request) -> dict:
+@router.post("/events", response_model=EventCreatedResponse)
+def create_event(payload: EventCreate) -> dict:
     """Create a new event with budget, timeline, and vendors.
 
     Args:
         payload: Validated event details supplied by the client.
-        request: Incoming request, reserved for session isolation.
 
     Returns:
         A mapping with the new event identifier and name.
@@ -100,7 +131,11 @@ def create_event(payload: EventCreate, request: Request) -> dict:
     try:
         store.create_event(ev)
     except CapacityError:
-        raise HTTPException(status_code=429, detail="event store full")
+        raise HTTPException(
+            status_code=429,
+            detail="event store full",
+            headers={"Retry-After": "30"},
+        )
     for line in budget_breakdown(ev):
         store.add_budget_line(line)
     for m in timeline_for(ev):
@@ -110,12 +145,11 @@ def create_event(payload: EventCreate, request: Request) -> dict:
     return {"event_id": ev.id, "name": ev.name}
 
 
-@router.get("/events")
-def list_events(request: Request, limit: int = 50, offset: int = 0) -> dict:
+@router.get("/events", response_model=EventSummaryResponse)
+def list_events(limit: int = 50, offset: int = 0) -> dict:
     """List events with pagination.
 
     Args:
-        request: Incoming request, reserved for session isolation.
         limit: Maximum number of events to return, clamped to 1..100.
         offset: Number of events to skip before collecting results.
 
@@ -126,18 +160,15 @@ def list_events(request: Request, limit: int = 50, offset: int = 0) -> dict:
     offset = max(0, offset)
     store = get_store()
     events = store.list_events(limit=limit, offset=offset)
-    return {"events": [{"id": e.id, "name": e.name, "event_type": e.event_type.value,
-                        "event_date": e.event_date.isoformat(), "guest_count": e.guest_count,
-                        "budget_total": e.budget_total} for e in events]}
+    return {"events": [event_summary(e) for e in events]}
 
 
-@router.get("/events/{event_id}")
-def get_event(event_id: str, request: Request) -> dict:
+@router.get("/events/{event_id}", response_model=EventDetailResponse)
+def get_event(event_id: str) -> dict:
     """Get a single event with its budget, timeline, and vendors.
 
     Args:
         event_id: Identifier of the event to retrieve.
-        request: Incoming request, reserved for session isolation.
 
     Returns:
         A mapping with the event, its budget lines, timeline, and vendors.
@@ -150,23 +181,20 @@ def get_event(event_id: str, request: Request) -> dict:
     if not ev:
         raise HTTPException(status_code=404, detail="not found")
     return {
-        "event": {"id": ev.id, "name": ev.name, "event_type": ev.event_type.value,
-                  "event_date": ev.event_date.isoformat(), "guest_count": ev.guest_count,
-                  "budget_total": ev.budget_total, "theme": ev.theme, "location": ev.location, "notes": ev.notes},
-        "budget": [{"id": b.id, "category": b.category, "allocated": b.allocated, "spent": b.spent} for b in store.list_budget(event_id)],
-        "timeline": [{"id": m.id, "title": m.title, "due_date": m.due_date.isoformat(), "status": m.status} for m in store.list_timeline(event_id)],
-        "vendors": [{"id": v.id, "category": v.category, "name": v.name, "status": v.status.value, "cost_estimate": v.cost_estimate} for v in store.list_vendors(event_id)],
+        "event": event_detail(ev),
+        "budget": [budget_line_dict(b) for b in store.list_budget(event_id)],
+        "timeline": [milestone_dict(m) for m in store.list_timeline(event_id)],
+        "vendors": [vendor_dict(v) for v in store.list_vendors(event_id)],
     }
 
 
-@router.put("/events/{event_id}")
-def update_event(event_id: str, payload: EventUpdate, request: Request) -> dict:
+@router.put("/events/{event_id}", response_model=EventUpdatedResponse)
+def update_event(event_id: str, payload: EventUpdate) -> dict:
     """Update an existing event.
 
     Args:
         event_id: Identifier of the event to update.
         payload: Validated fields to apply; omitted fields are left unchanged.
-        request: Incoming request, reserved for session isolation.
 
     Returns:
         A mapping with the event identifier and an update confirmation.
@@ -203,13 +231,12 @@ def update_event(event_id: str, payload: EventUpdate, request: Request) -> dict:
     return {"event_id": ev.id, "updated": True}
 
 
-@router.delete("/events/{event_id}")
-def delete_event(event_id: str, request: Request) -> dict:
+@router.delete("/events/{event_id}", response_model=EventDeletedResponse)
+def delete_event(event_id: str) -> dict:
     """Delete an event.
 
     Args:
         event_id: Identifier of the event to delete.
-        request: Incoming request, reserved for session isolation.
 
     Returns:
         A mapping confirming the deletion.
@@ -221,6 +248,41 @@ def delete_event(event_id: str, request: Request) -> dict:
     if not store.delete_event(event_id):
         raise HTTPException(status_code=404, detail="not found")
     return {"deleted": True}
+
+
+def _generate_answer(prompt: str, hits: list[dict]) -> str:
+    """Answer a grounded prompt, degrading safely when the provider fails.
+
+    A provider outage (network timeout, upstream API error, missing SDK) must
+    never turn into a 500 or leak a stack trace. The failure is logged with
+    the exception class only - no secrets and no user input - and the request
+    falls back to the deterministic echo provider, then to an inline grounded
+    rendering of the retrieved corpus entries.
+
+    Args:
+        prompt: Fully rendered prompt to send to the provider.
+        hits: Retrieved corpus entries backing the grounded fallback.
+
+    Returns:
+        The provider's answer, or a deterministic grounded answer derived from
+        the retrieved hits.
+    """
+    try:
+        return build_provider().answer(prompt)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "LLM provider '%s' failed (%s); degrading to the echo provider",
+            settings.llm_provider,
+            type(exc).__name__,
+        )
+    try:
+        return build_provider("echo").answer(prompt)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Echo provider failed (%s); using the inline grounded fallback",
+            type(exc).__name__,
+        )
+    return render_grounded_ideas(hits)
 
 
 def _run_ideas(event_id: str, query: str, top_k: int) -> dict:
@@ -249,13 +311,19 @@ def _run_ideas(event_id: str, query: str, top_k: int) -> dict:
                 "citations": [], "disclaimer": DISCLAIMER,
                 "answer": CANNOT_DETERMINE, "ideas_text": CANNOT_DETERMINE}
     prompt = build_ideas_prompt(query, hits, et)
-    provider = build_provider()
-    text = provider.answer(prompt)
+    text = _generate_answer(prompt, hits)
     conf = calibrate_confidence(hits)
-    cites = [{"id": h.get("id"), "text": h.get("text"), "score": h.get("score")} for h in hits]
+    cites = [
+        {
+            "id": str(h.get("id") or ""),
+            "text": str(h.get("text") or ""),
+            "score": float(h.get("score") or 0.0),
+        }
+        for h in hits
+    ]
     return {
         "ideas_text": text,
-        "ideas": [h.get("text") for h in hits],
+        "ideas": [str(h.get("text") or "") for h in hits],
         "confidence": conf,
         "citations": cites,
         "disclaimer": DISCLAIMER,
@@ -263,13 +331,12 @@ def _run_ideas(event_id: str, query: str, top_k: int) -> dict:
     }
 
 
-@router.post("/ideas")
-def ideas(payload: IdeasRequest, request: Request) -> dict:
+@router.post("/ideas", response_model=IdeasResponse)
+def ideas(payload: IdeasRequest) -> dict:
     """Generate ideas for an event.
 
     Args:
         payload: Validated idea request carrying the event, query, and top_k.
-        request: Incoming request, reserved for session isolation.
 
     Returns:
         A mapping with the ideas, confidence, citations, and disclaimer.
@@ -280,13 +347,12 @@ def ideas(payload: IdeasRequest, request: Request) -> dict:
     return _run_ideas(payload.event_id, payload.query, payload.top_k)
 
 
-@router.post("/ask")
-def ask(payload: AskRequest, request: Request) -> dict:
+@router.post("/ask", response_model=IdeasResponse)
+def ask(payload: AskRequest) -> dict:
     """Ask a planning question for an event.
 
     Args:
         payload: Validated question carrying the event id, query, and top_k.
-        request: Incoming request, reserved for session isolation.
 
     Returns:
         A mapping with the ideas, confidence, citations, and disclaimer.
@@ -304,13 +370,12 @@ def ask(payload: AskRequest, request: Request) -> dict:
     return _run_ideas(eid, q, payload.top_k)
 
 
-@router.post("/export")
-def export_event(payload: ExportRequest, request: Request) -> dict:
+@router.post("/export", response_model=ExportResponse)
+def export_event(payload: ExportRequest) -> dict:
     """Export an event plan.
 
     Args:
         payload: Validated export request carrying the event identifier.
-        request: Incoming request, reserved for session isolation.
 
     Returns:
         A mapping with the event, its budget, timeline, vendors, and disclaimer.
@@ -323,24 +388,19 @@ def export_event(payload: ExportRequest, request: Request) -> dict:
     ev = store.get_event(eid)
     if not ev:
         raise HTTPException(status_code=404, detail="not found")
-    data = {
-        "event": {"id": ev.id, "name": ev.name, "event_type": ev.event_type.value,
-                  "event_date": ev.event_date.isoformat(), "guest_count": ev.guest_count,
-                  "budget_total": ev.budget_total, "theme": ev.theme, "location": ev.location, "notes": ev.notes},
-        "budget": [{"category": b.category, "allocated": b.allocated, "spent": b.spent} for b in store.list_budget(eid)],
-        "timeline": [{"title": m.title, "due_date": m.due_date.isoformat(), "status": m.status} for m in store.list_timeline(eid)],
-        "vendors": [{"category": v.category, "name": v.name, "status": v.status.value, "cost_estimate": v.cost_estimate} for v in store.list_vendors(eid)],
-        "disclaimer": DISCLAIMER,
-    }
-    return data
+    return event_plan_dict(
+        ev,
+        store.list_budget(eid),
+        store.list_timeline(eid),
+        store.list_vendors(eid),
+    )
 
 
-@router.post("/upload")
-async def upload(request: Request, file: UploadFile = File(...)) -> dict:  # noqa: B008
+@router.post("/upload", response_model=UploadResponse)
+async def upload(file: UploadFile = File(...)) -> dict:  # noqa: B008
     """Upload a PDF document.
 
     Args:
-        request: Incoming request, reserved for session isolation.
         file: Uploaded PDF payload, read with a bounded buffer.
 
     Returns:
@@ -354,8 +414,9 @@ async def upload(request: Request, file: UploadFile = File(...)) -> dict:  # noq
     if len(raw) > settings.max_upload_bytes:
         raise HTTPException(status_code=413, detail="file too large (10 MB limit)")
     filename = sanitize_filename(file.filename or "")
+    content_type = file.content_type or "application/octet-stream"
     try:
-        validate_pre_parse(filename, file.content_type or "application/octet-stream", len(raw), raw)
+        validate_pre_parse(filename, content_type, len(raw), raw)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"filename": filename, "size": len(raw), "status": "accepted"}

@@ -61,6 +61,25 @@ def build_grounded_prompt(query: str, hits, plain_language: bool = False) -> str
     return base
 
 
+def render_grounded_ideas(hits: list[dict]) -> str:
+    """Render a deterministic, grounded answer straight from retrieved hits.
+
+    Used as the last-resort fallback when every LLM provider is unavailable,
+    so the user still receives corpus-backed guidance instead of an error.
+
+    Args:
+        hits: Retrieved corpus entries carrying "id" and "text" keys.
+
+    Returns:
+        A bullet list of the retrieved entries, or the "Cannot Determine"
+        notice when nothing was retrieved.
+    """
+    if not hits:
+        return CANNOT_DETERMINE
+    lines = [f"- [{h.get('id')}] {h.get('text', '')}" for h in hits[:5]]
+    return "Ideas:\n" + "\n".join(lines)
+
+
 def calibrate_confidence(hits: list[dict]) -> str:
     """Calibrate a confidence label from retrieved hits.
 
@@ -82,7 +101,7 @@ def calibrate_confidence(hits: list[dict]) -> str:
 
 
 def confidence_for(
-    hits: list, count: int = 0, scores: list[float] | None = None
+    hits: list, count: int = 0, scores: list[float] | None = None,
 ) -> str:
     """Score-calibrated confidence with count fallback (mirrors legal).
 

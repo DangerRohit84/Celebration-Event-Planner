@@ -20,6 +20,50 @@ CORPUS_PATH = Path(__file__).resolve().parents[1] / "data" / "ideas_corpus.json"
 _cache_lock = threading.Lock()
 _cached: dict = {"corpus": None, "vectorizer": None, "matrix": None, "mtime": None}
 
+# Fallback English stop-word set, used when scikit-learn is unavailable.
+# The set mirrors the words sklearn removes, so the "no signal" guard below
+# behaves identically in both environments.
+_FALLBACK_STOP_WORDS = frozenset(
+    {
+        "a", "about", "above", "after", "again", "against", "all", "am", "an",
+        "and", "any", "are", "as", "at", "be", "because", "been", "before",
+        "being", "below", "between", "both", "but", "by", "can", "could",
+        "did", "do", "does", "doing", "down", "during", "each", "few", "for",
+        "from", "further", "had", "has", "have", "having", "he", "her", "here",
+        "hers", "him", "his", "how", "i", "if", "in", "into", "is", "it",
+        "its", "itself", "just", "me", "more", "most", "my", "no", "nor",
+        "not", "now", "of", "off", "on", "once", "only", "or", "other", "our",
+        "ours", "out", "over", "own", "same", "she", "should", "so", "some",
+        "such", "than", "that", "the", "their", "theirs", "them", "then",
+        "there", "these", "they", "this", "those", "through", "to", "too",
+        "under", "until", "up", "very", "was", "we", "were", "what", "when",
+        "where", "which", "while", "who", "whom", "why", "will", "with",
+        "would", "you", "your", "yours",
+    },
+)
+
+_stop_words_cache: frozenset[str] | None = None
+
+
+def _stop_words() -> frozenset[str]:
+    """Return the English stop-word set used to detect signal-free queries.
+
+    Returns:
+        sklearn's English stop words when scikit-learn is installed, else the
+        built-in fallback set.
+    """
+    global _stop_words_cache
+    if _stop_words_cache is None:
+        try:
+            from sklearn.feature_extraction.text import (  # type: ignore[import-untyped]
+                ENGLISH_STOP_WORDS,
+            )
+
+            _stop_words_cache = frozenset(ENGLISH_STOP_WORDS)
+        except Exception:  # noqa: BLE001
+            _stop_words_cache = _FALLBACK_STOP_WORDS
+    return _stop_words_cache
+
 
 def _tokenize(text: str) -> list[str]:
     """Tokenize text into lowercase alphanumeric tokens.
@@ -97,6 +141,52 @@ def _get_index(corpus: list[dict]) -> tuple:
         return _cached["vectorizer"], _cached["matrix"], _cached["corpus"]
 
 
+def _has_signal(query: str) -> bool:
+    """Report whether a query carries at least one meaningful term.
+
+    A query built only from stop words ("the and of to") has no signal and
+    must not ground an answer in incidental word overlap.
+
+    Args:
+        query: Free-text query to inspect.
+
+    Returns:
+        True when the query contains at least one non-stop-word token.
+    """
+    tokens = set(_tokenize(query))
+    return bool(tokens - _stop_words())
+
+
+def _rank_by_token_overlap(
+    corpus: list[dict], query: str, top_k: int
+) -> list[dict]:
+    """Rank corpus entries by raw token overlap (zero-dependency fallback).
+
+    Args:
+        corpus: Corpus entries to rank.
+        query: Free-text query whose tokens are matched against the corpus.
+        top_k: Maximum number of entries to return.
+
+    Returns:
+        The best-matching corpus entries, each carrying a "score" key.
+    """
+    q_tokens = set(_tokenize(query))
+    scored: list[dict] = []
+    for c in corpus:
+        c_tokens = set(_tokenize(c.get("text", "")))
+        if not q_tokens or not c_tokens:
+            continue
+        overlap = len(q_tokens & c_tokens)
+        if overlap == 0:
+            continue
+        score = overlap / math.sqrt(len(q_tokens) * len(c_tokens))
+        entry = dict(c)
+        entry["score"] = float(min(1.0, score))
+        scored.append(entry)
+    scored.sort(key=lambda x: x["score"], reverse=True)
+    return scored[:top_k]
+
+
 def search(query: str, top_k: int = 5, event_type: str | None = None) -> list[dict]:
     """Return top_k corpus entries most relevant to query. Each has 'score' in (0,1].
 
@@ -108,6 +198,10 @@ def search(query: str, top_k: int = 5, event_type: str | None = None) -> list[di
     Returns:
         The most relevant corpus entries, each carrying a "score" key.
     """
+    if not _has_signal(query):
+        # A query made only of stop words carries no signal: refuse rather
+        # than grounding the answer in incidental word overlap.
+        return []
     corpus = load_corpus()
     if event_type:
         corpus = [c for c in corpus if c.get("event_type") in (event_type, "all")]
@@ -137,21 +231,7 @@ def search(query: str, top_k: int = 5, event_type: str | None = None) -> list[di
         pass
 
     # Fallback: token overlap.
-    q_tokens = set(_tokenize(query))
-    scored = []
-    for c in corpus:
-        c_tokens = set(_tokenize(c.get("text", "")))
-        if not q_tokens or not c_tokens:
-            continue
-        overlap = len(q_tokens & c_tokens)
-        if overlap == 0:
-            continue
-        score = overlap / math.sqrt(len(q_tokens) * len(c_tokens))
-        entry = dict(c)
-        entry["score"] = float(min(1.0, score))
-        scored.append(entry)
-    scored.sort(key=lambda x: x["score"], reverse=True)
-    return scored[:top_k]
+    return _rank_by_token_overlap(corpus, query, top_k)
 
 
 def reset_cache() -> None:

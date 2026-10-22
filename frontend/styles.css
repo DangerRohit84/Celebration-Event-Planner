@@ -226,6 +226,43 @@
 
 /* Celebration & Event Planner - beautiful, accessible UI.
    AA contrast (4.5:1 text), 44px touch targets, focus-visible, reduced motion. */
+
+/* ---------------------------------------------------------------------------
+   DOCUMENTED CONTRAST RATIOS (WCAG 2.1 AA)
+
+   Text contrast (AA needs >= 4.5:1 for normal text, >= 3:1 for large text
+   >= 24px / 18.7px bold). Measured against the background actually used.
+
+     --text     #1C1917 on --surface  #FFFFFF ....... 17.49:1  (AAA)
+     --text     #1C1917 on --bg       #FFF7ED ....... 16.47:1  (AAA)
+     --muted    #57534E on --surface  #FFFFFF .......  7.63:1  (AAA)
+     --muted    #57534E on --bg       #FFF7ED .......  7.19:1  (AAA)
+     --primary  #C2410C on --surface  #FFFFFF .......  5.18:1  (AA)
+     --primary  #C2410C on --bg       #FFF7ED .......  4.88:1  (AA)
+     #FFFFFF    on --primary        #C2410C .......  5.18:1  (AA, button label)
+     #FFFFFF    on --primary-hover  #9A3412 .......  7.31:1  (AAA)
+     --accent   #7C3AED on --surface  #FFFFFF .......  5.70:1  (AA)
+     --accent   #7C3AED on --bg       #FFF7ED .......  5.37:1  (AA, hero gradient
+                                                                 worst-case stop)
+     --error    #B91C1C on --error-soft #FEE2E2 .....  5.30:1  (AA)
+     --error    #B91C1C on --bg       #FFF7ED .......  6.09:1  (AA)
+     --success  #15803D on --surface  #FFFFFF .......  5.02:1  (AA)
+     status     #4C1D95 on --accent-soft #EDE9FE .....  9.23:1  (AAA)
+     placeholder #57534E on --surface #FFFFFF ........  7.63:1  (AAA)
+
+   Non-text / UI component contrast (WCAG 1.4.11 needs >= 3:1):
+
+     --border-strong #8A837C on #FFFFFF ..............  3.74:1  (AA, input
+                                                                 and select
+                                                                 boundaries)
+     --border-strong #8A837C on --bg    #FFF7ED ......  3.52:1  (AA)
+     focus outline  --accent #7C3AED on #FFFFFF .....  5.70:1  (AA)
+     --border #E7E0D8 is decorative only (card edges, rules) and is therefore
+     exempt from 1.4.11.
+
+   Touch targets: every button, input, and select is at least 44x44 CSS px
+   (WCAG 2.5.5 AAA / 2.5.8 AA), see the min-height/min-width rules below.
+   --------------------------------------------------------------------------- */
 :root {
   --bg: #FFF7ED;
   --surface: #FFFFFF;
@@ -238,6 +275,7 @@
   --text: #1C1917;
   --muted: #57534E;
   --border: #E7E0D8;
+  --border-strong: #8A837C;
   --error: #B91C1C;
   --error-soft: #FEE2E2;
   --success: #15803D;
@@ -398,14 +436,15 @@ label {
   color: var(--text);
 }
 
-input, select {
+input, select, textarea {
   min-height: 44px;
+  min-width: 44px;
   padding: 10px 14px;
   font-size: 16px;
   font-family: inherit;
   color: var(--text);
   background: var(--surface);
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--border-strong);
   border-radius: var(--radius-sm);
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
@@ -418,6 +457,7 @@ input:focus, select:focus {
 
 button, .btn {
   min-height: 44px;
+  min-width: 44px;
   padding: 10px 20px;
   font-size: 16px;
   font-family: inherit;

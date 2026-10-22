@@ -1,4 +1,9 @@
-﻿// Client: create event, show status/errors accessibly.
+// Client: create event, show status/errors accessibly.
+//
+// Safety: every DOM write goes through textContent / createElement - this
+// file never uses innerHTML, so user-supplied text can never be parsed as
+// markup. escapeHtml() is kept as defence in depth for any future
+// string-building helper.
 const form = document.getElementById('create-form');
 const statusEl = document.getElementById('status');
 const errorEl = document.getElementById('errors');
@@ -92,6 +97,7 @@ document.getElementById('askBtn')?.addEventListener('click', async () => {
     answerEl.focus();
   } catch (err) {
     errorEl.textContent = escapeHtml(err.message);
+    errorEl.focus();
   } finally {
     setLoading(askBtn, false);
   }

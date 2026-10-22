@@ -76,8 +76,14 @@ def test_security_headers(client):
     r = client.get("/health")
     assert r.headers.get("X-Content-Type-Options") == "nosniff"
     assert r.headers.get("X-Frame-Options") == "DENY"
-    assert r.headers.get("Referrer-Policy") == "no-referrer"
-    assert "default-src 'self'" in r.headers.get("Content-Security-Policy", "")
+    assert r.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+    csp = r.headers.get("Content-Security-Policy", "")
+    assert "default-src 'self'" in csp
+    assert "script-src 'self'" in csp
+    assert "style-src 'self'" in csp
+    assert "font-src 'self'" in csp
+    assert "object-src 'none'" in csp
+    assert "frame-ancestors 'none'" in csp
     assert r.headers.get("Strict-Transport-Security", "").startswith("max-age=")
     assert "camera=()" in r.headers.get("Permissions-Policy", "")
     assert r.headers.get("Cache-Control") == "no-store"
