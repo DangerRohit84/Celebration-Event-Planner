@@ -5,13 +5,16 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.config import settings
 from backend.app.ingest import (
+    DocumentCapacityError,
     DocumentError,
     DocumentStore,
     chunk_text,
     get_document_store,
     parse_pdf,
     relevant_chunks,
+    reset_document_store,
 )
 from backend.app.main import app
 from tests.pdf_support import build_pdf, build_scanned_pdf, build_text_pdf
@@ -94,15 +97,48 @@ def test_document_store_keeps_the_latest_upload() -> None:
     assert store.get(first.document_id) is first
 
 
-def test_document_store_is_bounded() -> None:
-    """The store must evict the oldest document when it is full."""
+def test_document_store_refuses_a_document_when_it_is_full() -> None:
+    """The store must refuse a new document instead of dropping an old one."""
     store = DocumentStore(max_documents=1)
     first = parse_pdf(build_text_pdf(), "a.pdf")
     second = parse_pdf(build_text_pdf(), "b.pdf")
     store.add(first)
-    store.add(second)
-    assert store.get(first.document_id) is None
-    assert store.get(second.document_id) is second
+    with pytest.raises(DocumentCapacityError):
+        store.add(second)
+    assert store.get(first.document_id) is first
+    assert store.count == 1
+
+
+def test_document_store_capacity_is_configurable() -> None:
+    """The configured maximum must be the capacity of the store."""
+    store = DocumentStore(max_documents=3)
+    assert store.max_documents == 3
+    assert store.count == 0
+
+
+def test_max_documents_setting_caps_the_upload_path(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient,
+) -> None:
+    """``MAX_DOCUMENTS`` must really bound the session document store."""
+    monkeypatch.setattr(settings, "max_documents", 2)
+    reset_document_store()
+    store = get_document_store()
+    assert store.max_documents == 2
+
+    for _ in range(2):
+        accepted = client.post(
+            "/upload",
+            files={"file": ("plan.pdf", build_text_pdf(), "application/pdf")},
+        )
+        assert accepted.status_code == 200
+
+    refused = client.post(
+        "/upload",
+        files={"file": ("plan.pdf", build_text_pdf(), "application/pdf")},
+    )
+    assert refused.status_code == 429
+    assert refused.headers.get("Retry-After")
+    assert store.count == 2
 
 
 def test_upload_returns_pages_and_chunks(client: TestClient) -> None:

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ..prompting import CANNOT_DETERMINE, plain_sentence
+from ..prompting import (
+    CANNOT_DETERMINE,
+    PLAIN_HEADER,
+    STANDARD_HEADER,
+    plain_sentence,
+)
 
 PLAIN_LANGUAGE_SYSTEM = (
     "You explain celebration and event planning in simple everyday language. "
@@ -36,9 +41,9 @@ class EchoProvider:
     def answer(self, prompt: str, *, plain_language: bool = False) -> str:
         """Return a deterministic lead of the prompt context.
 
-        In plain-language mode the entries are shortened and their bracketed
-        source markers are dropped, so the plain-language rendering is
-        visibly different from the standard one.
+        In plain-language mode the entries are shortened, their bracketed
+        source markers are dropped and the header is shorter, so the
+        plain-language rendering is genuinely shorter than the standard one.
 
         Args:
             prompt: Prompt text whose bracketed context lines are extracted.
@@ -55,5 +60,5 @@ class EchoProvider:
             return CANNOT_DETERMINE
         if plain_language:
             body = "\n".join(f"- {plain_sentence(c)}" for c in ctx[:5])
-            return "Simple ideas:\n" + body
-        return "Ideas:\n" + "\n".join(f"- {c}" for c in ctx[:5])
+            return PLAIN_HEADER + "\n" + body
+        return STANDARD_HEADER + "\n" + "\n".join(f"- {c}" for c in ctx[:5])

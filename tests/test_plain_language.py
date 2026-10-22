@@ -1,12 +1,13 @@
 """Plain-language toggle tests.
 
 The toggle is a shipped feature: a checkbox in the UI, a flag on the wire,
-a different prompt, and a different rendering. These tests pin every link
-in that chain so the feature cannot silently regress into a no-op.
+a different prompt, and a shorter rendering. These tests pin every link in
+that chain so the feature cannot silently regress into a no-op.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -15,18 +16,45 @@ from fastapi.testclient import TestClient
 from backend.app.llm.base import EchoProvider
 from backend.app.main import app
 from backend.app.prompting import (
+    PLAIN_HEADER,
     PLAIN_LANGUAGE_RULE,
+    STANDARD_HEADER,
     build_ideas_prompt,
     render_grounded_ideas,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+VIDEO_SCRIPT = (ROOT / "docs" / "VIDEO_SCRIPT.md").read_text(encoding="utf-8")
 
 HITS = [
     {"id": "w1", "text": "Outdoor garden ceremony with string lights.", "score": 0.9},
     {"id": "w2", "text": "Buffet with live stations keeps guests engaged.", "score": 0.4},
 ]
+
+# Representative questions that must all ground in the corpus.
+REPRESENTATIVE_QUERIES = [
+    "outdoor ceremony ideas",
+    "budget-friendly decor ideas for a garden wedding",
+    "photo booth props and instant prints",
+    "guest favor and entertainment",
+    "digital invitations 6 weeks ahead with RSVP tracking",
+    "day-of timeline shared with all vendors",
+    "buffet with live stations",
+    "seasonal flowers and string lights",
+    "rsvp tracking and dietary capture",
+    "guests engaged and per-plate cost",
+]
+
+
+def _demo_queries() -> list[str]:
+    """Return the sample queries the video script tells the presenter to ask.
+
+    Returns:
+        The quoted questions listed in ``docs/VIDEO_SCRIPT.md``.
+    """
+    section = VIDEO_SCRIPT.split("## Sample ask queries", 1)[1]
+    return re.findall(r'^- "([^"]+)"$', section, re.MULTILINE)
 
 
 @pytest.fixture()
@@ -83,8 +111,8 @@ def test_echo_provider_renders_plain_language_differently() -> None:
     standard = EchoProvider().answer(prompt)
     plain = EchoProvider().answer(prompt, plain_language=True)
     assert standard != plain
-    assert "Simple ideas:" in plain
-    assert "Ideas:" in standard
+    assert PLAIN_HEADER in plain
+    assert STANDARD_HEADER in standard
     assert len(plain) < len(standard)
 
 
@@ -93,8 +121,48 @@ def test_grounded_renderer_supports_plain_language() -> None:
     standard = render_grounded_ideas(HITS)
     plain = render_grounded_ideas(HITS, plain_language=True)
     assert standard != plain
-    assert "Simple ideas:" in plain
+    assert PLAIN_HEADER in plain
     assert "[w1]" not in plain
+    assert len(plain) < len(standard)
+
+
+def test_plain_rendering_is_shorter_for_most_queries(client: TestClient) -> None:
+    """The plain rendering must be shorter, not merely differently worded."""
+    eid = _event(client)
+    shorter = 0
+    for query in REPRESENTATIVE_QUERIES:
+        standard = client.post(
+            "/ideas", json={"event_id": eid, "query": query},
+        ).json()["answer"]
+        plain = client.post(
+            "/ideas",
+            json={"event_id": eid, "query": query, "plain_language": True},
+        ).json()["answer"]
+        assert len(plain) <= len(standard), f"plain rendering grew for {query!r}"
+        if len(plain) < len(standard):
+            shorter += 1
+    assert shorter >= 8, (
+        f"only {shorter} of {len(REPRESENTATIVE_QUERIES)} plain renderings "
+        "were shorter than the standard ones"
+    )
+
+
+def test_plain_rendering_is_never_longer_for_the_demo_queries(
+    client: TestClient,
+) -> None:
+    """Every query the video script tells the presenter to ask stays shorter."""
+    eid = _event(client)
+    queries = _demo_queries()
+    assert queries, "the video script lists no sample queries"
+    for query in queries:
+        standard = client.post(
+            "/ideas", json={"event_id": eid, "query": query},
+        ).json()["answer"]
+        plain = client.post(
+            "/ideas",
+            json={"event_id": eid, "query": query, "plain_language": True},
+        ).json()["answer"]
+        assert len(plain) <= len(standard), f"plain rendering grew for {query!r}"
 
 
 def test_api_plain_language_flag_changes_the_answer(client: TestClient) -> None:

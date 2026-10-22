@@ -15,7 +15,13 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 
 from .config import settings
-from .ingest import DocumentError, get_document_store, parse_pdf, relevant_chunks
+from .ingest import (
+    DocumentCapacityError,
+    DocumentError,
+    get_document_store,
+    parse_pdf,
+    relevant_chunks,
+)
 from .llm import build_provider
 from .models import Event, EventType
 from .planner import budget_breakdown, timeline_for, vendor_checklist
@@ -62,6 +68,8 @@ router = APIRouter()
 
 # Retry-After written when the bounded event store is full.
 STORE_FULL_RETRY_AFTER_SECONDS = 30
+# Retry-After written when the bounded session document store is full.
+DOCUMENT_STORE_FULL_RETRY_AFTER_SECONDS = 30
 
 
 def _parse_event_type(value: str) -> EventType:
@@ -448,6 +456,10 @@ async def upload(file: UploadFile = File(...)) -> dict:  # noqa: B008
     section-aware chunks that are kept for the session, so a later question
     can be grounded in the uploaded document as well as in the vetted corpus.
 
+    The session document store is bounded by the ``MAX_DOCUMENTS`` setting:
+    when it is saturated the upload is refused with a 429 instead of
+    silently dropping an earlier document.
+
     Args:
         file: Uploaded PDF payload, read with a bounded buffer.
 
@@ -458,7 +470,8 @@ async def upload(file: UploadFile = File(...)) -> dict:  # noqa: B008
     Raises:
         HTTPException: With status 413 when the file exceeds the size limit,
             status 400 when it fails PDF pre-parse validation or cannot be
-            parsed (for example a scanned, image-only document).
+            parsed (for example a scanned, image-only document), and status
+            429 when the session document store is saturated.
     """
     raw = await file.read(settings.max_upload_bytes + 1)
     if len(raw) > settings.max_upload_bytes:
@@ -473,7 +486,14 @@ async def upload(file: UploadFile = File(...)) -> dict:  # noqa: B008
         document = parse_pdf(raw, filename)
     except DocumentError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    get_document_store().add(document)
+    try:
+        get_document_store().add(document)
+    except DocumentCapacityError as e:
+        raise HTTPException(
+            status_code=429,
+            detail="document store full",
+            headers={"Retry-After": str(DOCUMENT_STORE_FULL_RETRY_AFTER_SECONDS)},
+        ) from e
     return {
         "filename": filename,
         "size": len(raw),

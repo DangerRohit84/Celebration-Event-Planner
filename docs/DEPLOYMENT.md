@@ -41,7 +41,7 @@ Why: Dockerfile honours $PORT, stateless-friendly (SQLite per instance — fine 
 | `MAX_UPLOAD_BYTES` | `10485760` | Upload size cap (10 MB) |
 | `MAX_STORE_EVENTS` | `5000` | Event-store capacity → 429 when full |
 | `MAX_STORE_CHUNKS` | `1000` | Chunks retained per uploaded document |
-| `MAX_DOCUMENTS` | `10` | Uploaded documents kept in the session store |
+| `MAX_DOCUMENTS` | `10` | Documents kept in the session document store → 429 + `Retry-After` when full |
 | `PORT` | `8000` | Listen port |
 | `LOG_LEVEL` | `info` | Root log level |
 
@@ -54,7 +54,7 @@ Copy `.env.example` to `.env` for local runs. `.env` is gitignored; only `.env.e
   empty allowlist means no `Access-Control-Allow-Origin` header is sent and the browser blocks
   every cross-origin call. For cross-origin prod: `--set-env-vars FRONTEND_ORIGIN=https://your-app.run.app`.
 - Security headers on (nosniff/DENY/no-referrer/CSP + HSTS + Permissions-Policy + no-store + X-Process-Time) + X-RateLimit-*/Retry-After + non-root Docker + HEALTHCHECK /health.
-- Upload DoS-safe: extension + basename sanitization (traversal-safe) + size + %PDF- magic pre-parse, then a bounded pypdf parse (a PDF with no pages or no extractable text is rejected with 400); bounded store (MAX_STORE_EVENTS, 429 when full), bounded guest_count/top_k (422), sliding-window rate limit (RATE_LIMIT_PER_MIN=200, tested 429 + Retry-After), safe errors (no Traceback).
+- Upload DoS-safe: extension + basename sanitization (traversal-safe) + size + %PDF- magic pre-parse, then a bounded pypdf parse (a PDF with no pages or no extractable text is rejected with 400); bounded store (MAX_STORE_EVENTS, 429 when full), bounded session document store (MAX_DOCUMENTS, 429 + Retry-After when full), bounded guest_count/top_k (422), sliding-window rate limit (RATE_LIMIT_PER_MIN=200, tested 429 + Retry-After), safe errors (no Traceback).
 - Efficiency: bounded top_k fan-out, cached TF-IDF index (fitted once, query transform only), sanitized inputs, Pydantic bounds.
 - Add Redis/pgvector for shared index across instances.
 - Add auth + per-user event isolation (current MVP is demo, not multi-tenant prod).

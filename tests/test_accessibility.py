@@ -3,6 +3,8 @@
 import re
 from pathlib import Path
 
+from backend.app.prompting import DISCLAIMER
+
 # Anchored to the repository root so collection never depends on the cwd.
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
@@ -50,7 +52,8 @@ def test_contrast_and_motion():
 
 def test_noscript_and_disclaimer():
     assert "<noscript>" in HTML
-    assert "General information only" in HTML
+    # The banner must carry the same disclaimer the API returns.
+    assert DISCLAIMER in HTML
 
 
 def _strip_comments(source):

@@ -9,9 +9,12 @@ Responsibilities:
    slice of arbitrary characters.
 3. Keep a bounded, in-memory registry of the parsed documents so the
    ideas/ask flow can inject the most relevant excerpts as extra context.
+   The registry is sized by the ``MAX_DOCUMENTS`` setting and refuses new
+   documents when it is saturated, so the upload route can answer 429.
 
 The module is deliberately free of HTTP concerns: it raises
-:class:`DocumentError` and the route translates that into a 400.
+:class:`DocumentError` and :class:`DocumentCapacityError`, and the route
+translates them into a 400 and a 429 respectively.
 """
 
 from __future__ import annotations
@@ -39,6 +42,10 @@ DEFAULT_RELEVANT_CHUNKS = 3
 
 class DocumentError(Exception):
     """Raised when an uploaded document cannot be parsed (maps to HTTP 400)."""
+
+
+class DocumentCapacityError(Exception):
+    """Raised when the document store is at capacity (maps to HTTP 429)."""
 
 
 @dataclass(frozen=True)
@@ -276,9 +283,12 @@ def relevant_chunks(
 class DocumentStore:
     """Bounded, thread-safe registry of parsed documents.
 
-    The store keeps at most ``max_documents`` documents; the oldest upload
-    is evicted first. The most recent upload acts as the session document,
-    which is the one whose excerpts are injected into idea prompts.
+    The store keeps at most ``max_documents`` documents. When it is
+    saturated it refuses new documents instead of silently dropping an
+    older one, so the caller learns about the limit (the upload route
+    answers with HTTP 429 and a ``Retry-After`` header). The most recent
+    upload acts as the session document, which is the one whose excerpts
+    are injected into idea prompts.
     """
 
     def __init__(self, max_documents: int = DEFAULT_MAX_DOCUMENTS) -> None:
@@ -291,18 +301,44 @@ class DocumentStore:
         self._documents: dict[str, ParsedDocument] = {}
         self._lock = threading.Lock()
 
+    @property
+    def max_documents(self) -> int:
+        """Return the configured capacity of the store.
+
+        Returns:
+            The maximum number of documents the store keeps.
+        """
+        return self._max
+
+    @property
+    def count(self) -> int:
+        """Return the number of documents currently held.
+
+        Returns:
+            The number of stored documents.
+        """
+        with self._lock:
+            return len(self._documents)
+
     def add(self, document: ParsedDocument) -> None:
-        """Store a parsed document, evicting the oldest one when full.
+        """Store a parsed document.
 
         Args:
             document: The document to store.
+
+        Raises:
+            DocumentCapacityError: When the store already holds its maximum
+                number of documents.
         """
         with self._lock:
-            self._documents.pop(document.document_id, None)
+            if (
+                document.document_id not in self._documents
+                and len(self._documents) >= self._max
+            ):
+                raise DocumentCapacityError(
+                    f"document store full ({self._max} documents)",
+                )
             self._documents[document.document_id] = document
-            while len(self._documents) > self._max:
-                oldest = next(iter(self._documents))
-                del self._documents[oldest]
 
     def get(self, document_id: str) -> ParsedDocument | None:
         """Look up a stored document by identifier.
@@ -337,7 +373,20 @@ class DocumentStore:
             self._documents.clear()
 
 
-_document_store = DocumentStore()
+def build_document_store() -> DocumentStore:
+    """Create a document store sized by the configured maximum.
+
+    The capacity comes from ``MAX_DOCUMENTS`` (see
+    :func:`backend.app.config.Settings.max_documents`), so the documented
+    environment variable really bounds the session document store.
+
+    Returns:
+        A new, empty document store.
+    """
+    return DocumentStore(max_documents=max(1, settings.max_documents))
+
+
+_document_store = build_document_store()
 
 
 def get_document_store() -> DocumentStore:
@@ -350,9 +399,13 @@ def get_document_store() -> DocumentStore:
 
 
 def reset_document_store() -> None:
-    """Clear the process-wide document store (tests).
+    """Rebuild the process-wide document store (tests).
+
+    The store is rebuilt rather than merely cleared so that it always
+    reflects the currently configured ``MAX_DOCUMENTS`` value.
 
     Returns:
         None.
     """
-    _document_store.clear()
+    global _document_store
+    _document_store = build_document_store()

@@ -144,6 +144,8 @@ def test_storage_exhaustion_returns_429_with_retry_after(
     [
         "quantum mechanical supercomputing",
         "the and of to a in is it",
+        "what is the capital of France",
+        "best honeymoon destination in Maldives",
     ],
 )
 def test_hard_refusal_when_nothing_can_be_grounded(

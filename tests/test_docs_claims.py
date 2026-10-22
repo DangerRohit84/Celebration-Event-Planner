@@ -235,3 +235,68 @@ def test_no_stale_project_paths_in_the_docs() -> None:
         assert "ALLOWED_ORIGINS" not in text, f"{document.name} mentions a fake env var"
         assert "doc_ids" not in text, f"{document.name} mentions a removed symbol"
         assert "DEMO_MODE" not in text, f"{document.name} mentions a removed setting"
+
+
+# --------------------------------------------------------------------------
+# Behavioural claims: the docs promise behaviour, so the behaviour is pinned
+# here. A claim that has a test behind it cannot drift.
+# --------------------------------------------------------------------------
+
+
+def test_the_quoted_disclaimer_matches_the_code() -> None:
+    """The docs must quote the disclaimer exactly as the code defines it."""
+    from backend.app.prompting import DISCLAIMER
+
+    for document in (README, NARRATIVE):
+        assert DISCLAIMER in document.read_text(encoding="utf-8"), (
+            f"{document.name} does not quote the disclaimer verbatim"
+        )
+
+
+def test_the_banner_carries_the_same_disclaimer() -> None:
+    """Every surface must show the same disclaimer text."""
+    from backend.app.prompting import DISCLAIMER
+
+    html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    assert DISCLAIMER in html
+
+
+def test_the_prompt_carries_the_disclaimer() -> None:
+    """The prompt is a disclaimer surface, so it must contain the text."""
+    from backend.app.prompting import DISCLAIMER, build_ideas_prompt
+
+    prompt = build_ideas_prompt("ideas", [{"id": "w1", "text": "garden"}], "wedding")
+    assert DISCLAIMER in prompt
+
+
+def test_max_documents_is_read_by_the_application() -> None:
+    """A documented setting that nothing reads is a dead knob."""
+    readers = [
+        path
+        for path in (ROOT / "backend" / "app").rglob("*.py")
+        if path.name != "config.py" and "max_documents" in path.read_text(encoding="utf-8")
+    ]
+    assert readers, "MAX_DOCUMENTS is parsed but never used by the application"
+
+
+def test_every_provider_pins_temperature_zero() -> None:
+    """The "temperature 0" claim must hold for every remote provider."""
+    for module in ("gemini.py", "openai_compat.py"):
+        source = (ROOT / "backend" / "app" / "llm" / module).read_text(encoding="utf-8")
+        assert "temperature" in source, f"{module} does not set a temperature"
+        pins_zero = re.search(r"temperature[\"']?\s*[:=]\s*0\b", source) or (
+            re.search(r"TEMPERATURE\s*=\s*0\b", source)
+        )
+        assert pins_zero, f"{module} does not pin the temperature to 0"
+
+
+def test_the_plain_rendering_is_shorter_than_the_standard_one() -> None:
+    """The "shorter answer" claim must hold on the shipped echo provider."""
+    from backend.app.llm.base import EchoProvider
+    from backend.app.prompting import build_ideas_prompt
+
+    hits = [{"id": "w1", "text": "Outdoor garden ceremony with string lights."}]
+    prompt = build_ideas_prompt("outdoor ceremony", hits, "wedding")
+    standard = EchoProvider().answer(prompt)
+    plain = EchoProvider().answer(prompt, plain_language=True)
+    assert len(plain) < len(standard)

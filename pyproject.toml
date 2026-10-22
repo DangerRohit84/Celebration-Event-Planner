@@ -62,7 +62,9 @@ extend-exclude = [".venv", "node_modules"]
 # The selected rules cover the codes used by the `# noqa:` directives in the
 # source (BLE001, S110, S112, UP017, B008, D418) plus the pycodestyle,
 # pyflakes, isort, comprehension, return, simplification, pyupgrade,
-# bugbear, bandit and naming families.
+# bugbear, bandit and naming families. None of those codes appears in the
+# `ignore` list below: a suppression is only meaningful when the rule it
+# suppresses is actually enabled.
 select = [
     "E4",    # pycodestyle - imports
     "E7",    # pycodestyle - statements
@@ -84,7 +86,6 @@ select = [
 ignore = [
     "E501",    # line length is handled by the formatter, not the linter
     "S101",    # assert - the point of a test suite
-    "B008",    # FastAPI dependency defaults (File(...), Depends(...))
     "PLR2004", # magic values are used deliberately in domain tables
 ]
 

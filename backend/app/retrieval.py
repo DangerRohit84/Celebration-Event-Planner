@@ -174,6 +174,12 @@ def _rank_by_token_overlap(
 ) -> list[dict]:
     """Rank corpus entries by raw token overlap (zero-dependency fallback).
 
+    Stop words are removed from both sides before the overlap is measured,
+    exactly as the TF-IDF path does (``stop_words="english"``). Without
+    that, an unrelated question such as "what is the capital of France"
+    would match a corpus entry on the word "of" and produce a confident,
+    meaningless answer instead of the hard refusal the docs promise.
+
     Args:
         corpus: Corpus entries to rank.
         query: Free-text query whose tokens are matched against the corpus.
@@ -182,10 +188,11 @@ def _rank_by_token_overlap(
     Returns:
         The best-matching corpus entries, each carrying a "score" key.
     """
-    q_tokens = set(_tokenize(query))
+    stop_words = _stop_words()
+    q_tokens = set(_tokenize(query)) - stop_words
     scored: list[dict] = []
     for c in corpus:
-        c_tokens = set(_tokenize(c.get("text", "")))
+        c_tokens = set(_tokenize(c.get("text", ""))) - stop_words
         if not q_tokens or not c_tokens:
             continue
         overlap = len(q_tokens & c_tokens)

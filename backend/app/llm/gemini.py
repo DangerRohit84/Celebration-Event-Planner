@@ -9,6 +9,10 @@ from .base import PLAIN_LANGUAGE_SYSTEM
 class GeminiProvider:
     """Gemini LLM provider."""
 
+    # The generation temperature is pinned to 0 so the grounded answers are
+    # reproducible, exactly like the OpenAI-compatible path.
+    TEMPERATURE = 0
+
     def __init__(self) -> None:
         """Create the Gemini client from the configured API key and model.
 
@@ -34,5 +38,9 @@ class GeminiProvider:
         contents = prompt
         if plain_language:
             contents = f"{PLAIN_LANGUAGE_SYSTEM}\n\n{prompt}"
-        resp = self._client.models.generate_content(model=self._model, contents=contents)
+        resp = self._client.models.generate_content(
+            model=self._model,
+            contents=contents,
+            config={"temperature": self.TEMPERATURE},
+        )
         return (resp.text or "").strip()
