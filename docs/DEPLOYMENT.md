@@ -22,7 +22,8 @@ Why: Dockerfile honours $PORT, stateless-friendly (SQLite per instance — fine 
 
 ## Option C: Vercel (Python)
 
-- Keep `backend/app/main.py` as the entry; add `vercel.json` routing `/ -> backend/app/main.py` if needed.
+- Keep `backend/app/main.py` as the entry point.
+- This repo does NOT ship a Vercel routing config. If you deploy to Vercel, add one yourself routing / -> backend/app/main.py, or point the Vercel Python runtime at `backend/app/main.py` directly. The Dockerfile in this repo is for Render/Cloud Run, not Vercel.
 - Note: serverless cold starts clear in-memory state — re-create events per session (call out in video).
 
 ## Configuration (every variable is read by `backend/app/config.py`)
