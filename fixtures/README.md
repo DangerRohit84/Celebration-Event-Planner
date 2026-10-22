@@ -1,4 +1,4 @@
-﻿# Sample event fixtures
+# Sample event fixtures
 
 JSON payloads matching `POST /events` body. Use for live demo / seeding:
 

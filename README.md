@@ -1,4 +1,4 @@
-﻿# Celebration & Event Planner — GenAI Planning Assistant (MVP)
+# Celebration & Event Planner — GenAI Planning Assistant (MVP)
 
 Plan a wedding, birthday, corporate, or community event in minutes: **budgets,
 timelines, vendor checklists, and grounded personalized ideas**. Every idea cites a

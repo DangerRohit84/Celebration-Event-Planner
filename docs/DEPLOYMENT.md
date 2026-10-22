@@ -1,4 +1,4 @@
-﻿# Deployment — any host works, Cloud Run suggested for Google bonus
+# Deployment — any host works, Cloud Run suggested for Google bonus
 
 MVP is a single FastAPI app serving API + static frontend. No build step, no disk writes beyond SQLite.
 

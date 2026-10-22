@@ -1,4 +1,4 @@
-﻿# Video script — 2–3 min functionality walkthrough (required)
+# Video script — 2–3 min functionality walkthrough (required)
 
 Record real app, no slides. Show URL bar at start (proves Live URL).
 

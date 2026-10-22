@@ -1,4 +1,4 @@
-﻿# Narrative — submission writeup (copy-paste ready)
+# Narrative — submission writeup (copy-paste ready)
 
 ## Problem
 Planning a celebration (wedding, birthday, community event) means juggling budgets, timelines, vendors, and ideas. Generic AI gives ungrounded suggestions with no citations, no refusal, and no structure; spreadsheets are manual and error-prone.
