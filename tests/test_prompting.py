@@ -1,5 +1,13 @@
 """Prompting tests."""
-from backend.app.prompting import build_ideas_prompt, calibrate_confidence, confidence_for, DISCLAIMER, CANNOT_DETERMINE, build_grounded_prompt
+
+from backend.app.prompting import (
+    CANNOT_DETERMINE,
+    DISCLAIMER,
+    build_grounded_prompt,
+    build_ideas_prompt,
+    calibrate_confidence,
+    confidence_for,
+)
 
 
 def test_build_ideas_prompt():
@@ -19,6 +27,7 @@ def test_calibrate_confidence():
 def test_confidence_for():
     assert confidence_for([], 0) == "Cannot Determine"
     from backend.app.models import Chunk
+
     c = [Chunk("a", "d", 1, "Clause 1", "x")]
     assert confidence_for(c, 1) in ("Partial", "Grounded")
 

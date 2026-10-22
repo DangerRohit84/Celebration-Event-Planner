@@ -1,7 +1,8 @@
-﻿"""Pytest fixtures."""
+"""Pytest fixtures."""
+
 import pytest
 
-from backend.app.storage import reset_store, InMemoryStore
+from backend.app.storage import InMemoryStore, reset_store
 
 
 @pytest.fixture(autouse=True)
@@ -14,5 +15,7 @@ def _reset_store():
 @pytest.fixture
 def client():
     from fastapi.testclient import TestClient
+
     from backend.app.main import app
+
     return TestClient(app)

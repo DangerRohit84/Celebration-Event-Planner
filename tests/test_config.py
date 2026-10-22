@@ -1,9 +1,16 @@
-﻿"""Config tests."""
+"""Config tests."""
+
 from backend.app.config import settings
 
 
 def test_defaults():
-    assert settings.llm_provider in ("echo", "gemini", "openai-compat", "openai", "openai_compat")
+    assert settings.llm_provider in (
+        "echo",
+        "gemini",
+        "openai-compat",
+        "openai",
+        "openai_compat",
+    )
     assert settings.rate_limit_per_min > 0
     assert settings.max_upload_bytes > 0
 

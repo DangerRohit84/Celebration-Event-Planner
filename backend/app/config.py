@@ -3,6 +3,7 @@
 All settings are read from environment variables with safe defaults.
 Secrets (API keys) are NEVER hardcoded; .env is gitignored.
 """
+
 from __future__ import annotations
 
 import os
@@ -15,6 +16,7 @@ load_dotenv()
 
 
 def _int(name: str, default: int) -> int:
+    """Parse an integer env var, falling back to default on failure."""
     try:
         return int(os.getenv(name, str(default)))
     except (TypeError, ValueError):
@@ -22,6 +24,7 @@ def _int(name: str, default: int) -> int:
 
 
 def _bool(name: str, default: bool) -> bool:
+    """Parse a boolean env var."""
     raw = os.getenv(name)
     if raw is None:
         return default
@@ -30,6 +33,8 @@ def _bool(name: str, default: bool) -> bool:
 
 @dataclass
 class Settings:
+    """Application settings loaded from environment variables."""
+
     # LLM
     llm_provider: str = os.getenv("LLM_PROVIDER", "echo")
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
@@ -56,11 +61,13 @@ class Settings:
 
     @property
     def allowed_origins(self) -> list[str]:
+        """Return the allowlisted frontend origins."""
         # Never wildcard; allowlist only.
         return [o.strip() for o in self.frontend_origin.split(",") if o.strip()]
 
     @property
     def db_path(self) -> Path:
+        """Resolve the sqlite file path for local dev."""
         # Resolve sqlite file path for local dev.
         url = self.database_url
         if url.startswith("sqlite:///"):

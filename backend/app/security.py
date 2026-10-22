@@ -7,10 +7,12 @@ Mirrors proven patterns from prior run:
 - Text sanitization for user inputs.
 - Allowlisted session IDs.
 """
+
 from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 from .config import settings
 
@@ -18,11 +20,15 @@ PDF_MAGIC = b"%PDF-"
 ALLOWED_CONTENT_TYPES = {"application/pdf", "application/octet-stream"}
 
 
-def sanitize_text(value, max_len: int = 2000) -> str:
-    """Strip control chars and cap length. Safe for storage + prompt injection defense."""
+def sanitize_text(value: object, max_len: int = 2000) -> str:
+    """Strip control chars and cap length."""
     if not isinstance(value, str):
         value = str(value)
-    cleaned = "".join(ch for ch in value if ch == "\n" or ch == "\t" or (ord(ch) >= 32 and ord(ch) != 127))
+    cleaned = "".join(
+        ch
+        for ch in value
+        if ch == "\n" or ch == "\t" or (ord(ch) >= 32 and ord(ch) != 127)
+    )
     return cleaned[:max_len].strip()
 
 
@@ -34,15 +40,16 @@ def sanitize_filename(raw: str) -> str:
     return name or "upload.pdf"
 
 
-def validate_pdf_magic(raw_bytes) -> bool:
+def validate_pdf_magic(raw_bytes: bytes | bytearray) -> bool:
+    """Validate that bytes start with the PDF magic header."""
     if not isinstance(raw_bytes, (bytes, bytearray)):
-        raise ValueError("invalid pdf magic")
+        raise TypeError("invalid pdf magic")
     if not bytes(raw_bytes).startswith(PDF_MAGIC):
         raise ValueError("invalid pdf magic")
     return True
 
 
-def validate_pre_parse(*args, **kwargs) -> bool:
+def validate_pre_parse(*args: Any, **kwargs: Any) -> bool:
     """Pre-parse guards. Single canonical style (legal):
        validate_pre_parse(filename, content_type, size_bytes, data)
     Also accepts legacy celebration style:
@@ -69,6 +76,10 @@ def validate_pre_parse(*args, **kwargs) -> bool:
     raw_bytes = bytes(raw_bytes)
     if size is None:
         size = len(raw_bytes)
+    try:
+        size = int(size)  # type: ignore[call-overload]
+    except (TypeError, ValueError):
+        size = len(raw_bytes)
 
     if not filename or not str(filename).lower().endswith(".pdf"):
         raise ValueError("PDF only: file must end with .pdf")
@@ -85,7 +96,7 @@ def validate_pre_parse(*args, **kwargs) -> bool:
     return True
 
 
-def sanitize_session_id(raw) -> str:
+def sanitize_session_id(raw: object) -> str:
     """Allowlist [A-Za-z0-9_-], max 64. Empty -> '' (no session)."""
     if not raw:
         return ""
@@ -93,7 +104,7 @@ def sanitize_session_id(raw) -> str:
         # support FakeReq-like? no, expect str
         try:
             raw = str(raw)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return ""
     cleaned = re.sub(r"[^A-Za-z0-9_-]", "", raw)
     return cleaned[:64]

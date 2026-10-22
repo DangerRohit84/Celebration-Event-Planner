@@ -1,9 +1,12 @@
-﻿"""Efficiency tests."""
+"""Efficiency tests."""
+
 import time
-from backend.app import main as main_module
-from fastapi.testclient import TestClient
-from backend.app.main import app
+
 import pytest
+from fastapi.testclient import TestClient
+
+from backend.app import main as main_module
+from backend.app.main import app
 
 
 @pytest.fixture()
@@ -23,6 +26,7 @@ def test_health_fast(client):
 
 def test_search_sub_second():
     from backend.app.retrieval import search
+
     t0 = time.time()
     search("outdoor ceremony", top_k=5)
     dt = time.time() - t0
@@ -31,6 +35,7 @@ def test_search_sub_second():
 
 def test_top_k_clamped():
     from backend.app.retrieval import search
+
     hits = search("outdoor ceremony", top_k=100)
     assert len(hits) <= 10
 

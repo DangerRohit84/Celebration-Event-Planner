@@ -1,9 +1,17 @@
-﻿"""Security tests."""
-from backend.app.security import sanitize_text, sanitize_filename, validate_pre_parse, validate_pdf_magic, sanitize_session_id
-from backend.app import main as main_module
-from fastapi.testclient import TestClient
-from backend.app.main import app
+"""Security tests."""
+
 import pytest
+from fastapi.testclient import TestClient
+
+from backend.app import main as main_module
+from backend.app.main import app
+from backend.app.security import (
+    sanitize_filename,
+    sanitize_session_id,
+    sanitize_text,
+    validate_pdf_magic,
+    validate_pre_parse,
+)
 
 
 def test_sanitize_text_strips_control():
@@ -104,6 +112,8 @@ def test_cors_not_wildcard(client):
 
 
 def test_errors_no_traceback(client):
-    r = client.post("/upload", files={"file": ("evil.pdf", b"not a pdf", "application/pdf")})
+    r = client.post(
+        "/upload", files={"file": ("evil.pdf", b"not a pdf", "application/pdf")}
+    )
     assert r.status_code == 400
     assert "Traceback" not in r.text

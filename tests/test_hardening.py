@@ -1,7 +1,9 @@
 """Hardening tests."""
-from backend.app.security import validate_pre_parse
+
 from fastapi.testclient import TestClient
+
 from backend.app.main import app
+from backend.app.security import validate_pre_parse
 
 
 def test_magic_rejects_text():
@@ -25,7 +27,9 @@ def test_pre_parse_legal_style():
 
 def test_doc_id_entropy():
     client = TestClient(app)
-    r = client.post("/upload", files={"file": ("r.pdf", b"%PDF-1.4", "application/pdf")})
+    r = client.post(
+        "/upload", files={"file": ("r.pdf", b"%PDF-1.4", "application/pdf")}
+    )
     # upload doesn't return doc_id; skip
     assert r.status_code == 200
 

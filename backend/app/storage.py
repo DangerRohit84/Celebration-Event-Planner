@@ -7,6 +7,7 @@ Design goals (learned from prior run):
 - Bounded: MAX_STORE_EVENTS enforced; 429 when full.
 - Thread-safe: a single lock guards mutations.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -14,26 +15,26 @@ import threading
 import uuid
 from datetime import date, datetime
 from pathlib import Path
-from typing import Protocol, Optional
+from typing import Protocol
 
 from .config import settings
-from .models import Event, BudgetLine, TimelineMilestone, Vendor, Guest
+from .models import BudgetLine, Event, Guest, TimelineMilestone, Vendor
 
 
 def new_id() -> str:
+    """Generate a new unique id."""
     return uuid.uuid4().hex
 
 
 class CapacityError(Exception):
     """Raised when the store is at capacity (maps to HTTP 429)."""
-    pass
 
 
 class EventStore(Protocol):
     """Repository contract. Implementations must be thread-safe."""
 
     def create_event(self, event: Event) -> Event: ...
-    def get_event(self, event_id: str) -> Optional[Event]: ...
+    def get_event(self, event_id: str) -> Event | None: ...
     def list_events(self, limit: int = 100, offset: int = 0) -> list[Event]: ...
     def update_event(self, event: Event) -> Event: ...
     def delete_event(self, event_id: str) -> bool: ...
@@ -55,7 +56,10 @@ class EventStore(Protocol):
 
 # ---------- In-memory backend (tests + ephemeral) ----------
 
+
 class InMemoryStore:
+    """In-memory event store (tests + ephemeral)."""
+
     def __init__(self, max_events: int | None = None):
         self._max = max_events if max_events is not None else settings.max_store_events
         self._events: dict[str, Event] = {}
@@ -79,14 +83,14 @@ class InMemoryStore:
             self._guests[event.id] = []
             return event
 
-    def get_event(self, event_id: str) -> Optional[Event]:
+    def get_event(self, event_id: str) -> Event | None:
         with self._lock:
             return self._events.get(event_id)
 
     def list_events(self, limit: int = 100, offset: int = 0) -> list[Event]:
         with self._lock:
             items = list(self._events.values())
-            return items[offset: offset + limit]
+            return items[offset : offset + limit]
 
     def update_event(self, event: Event) -> Event:
         with self._lock:
@@ -157,6 +161,7 @@ class InMemoryStore:
 
 
 # ---------- SQLite backend (default, persistent) ----------
+
 
 class SQLiteStore:
     """File-based persistent backend. Schema created on first use."""
@@ -240,34 +245,64 @@ class SQLiteStore:
                 raise CapacityError("event store full")
             with self._connect() as conn:
                 conn.execute(
-                    "INSERT INTO events (id,name,event_type,event_date,guest_count,budget_total,theme,location,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    (event.id, event.name, event.event_type.value if hasattr(event.event_type, "value") else str(event.event_type),
-                     event.event_date.isoformat(), event.guest_count, event.budget_total, event.theme, event.location, event.notes,
-                     event.created_at.isoformat(), event.updated_at.isoformat()),
+                    "INSERT INTO events (id,name,event_type,event_date,guest_count,budget_total,theme,location,notes,created_at,updated_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        event.id,
+                        event.name,
+                        event.event_type.value
+                        if hasattr(event.event_type, "value")
+                        else str(event.event_type),
+                        event.event_date.isoformat(),
+                        event.guest_count,
+                        event.budget_total,
+                        event.theme,
+                        event.location,
+                        event.notes,
+                        event.created_at.isoformat(),
+                        event.updated_at.isoformat(),
+                    ),
                 )
                 conn.commit()
             return event
 
-    def get_event(self, event_id: str) -> Optional[Event]:
+    def get_event(self, event_id: str) -> Event | None:
         with self._lock:
             with self._connect() as conn:
-                row = conn.execute("SELECT * FROM events WHERE id=?", (event_id,)).fetchone()
+                row = conn.execute(
+                    "SELECT * FROM events WHERE id=?", (event_id,)
+                ).fetchone()
             return self._row_to_event(row) if row else None
 
     def list_events(self, limit: int = 100, offset: int = 0) -> list[Event]:
         with self._lock:
             with self._connect() as conn:
-                rows = conn.execute("SELECT * FROM events ORDER BY created_at DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
+                rows = conn.execute(
+                    "SELECT * FROM events ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (limit, offset),
+                ).fetchall()
             return [self._row_to_event(r) for r in rows]
 
     def update_event(self, event: Event) -> Event:
         with self._lock:
             with self._connect() as conn:
                 cur = conn.execute(
-                    "UPDATE events SET name=?,event_type=?,event_date=?,guest_count=?,budget_total=?,theme=?,location=?,notes=?,updated_at=? WHERE id=?",
-                    (event.name, event.event_type.value if hasattr(event.event_type, "value") else str(event.event_type),
-                     event.event_date.isoformat(), event.guest_count, event.budget_total, event.theme, event.location, event.notes,
-                     event.updated_at.isoformat(), event.id),
+                    "UPDATE events SET name=?,event_type=?,event_date=?,guest_count=?,budget_total=?,theme=?,location=?,notes=?,updated_at=? "
+                    "WHERE id=?",
+                    (
+                        event.name,
+                        event.event_type.value
+                        if hasattr(event.event_type, "value")
+                        else str(event.event_type),
+                        event.event_date.isoformat(),
+                        event.guest_count,
+                        event.budget_total,
+                        event.theme,
+                        event.location,
+                        event.notes,
+                        event.updated_at.isoformat(),
+                        event.id,
+                    ),
                 )
                 conn.commit()
                 if cur.rowcount == 0:
@@ -275,24 +310,30 @@ class SQLiteStore:
             return event
 
     def delete_event(self, event_id: str) -> bool:
-        with self._lock:
-            with self._connect() as conn:
-                cur = conn.execute("DELETE FROM events WHERE id=?", (event_id,))
-                conn.commit()
-                return cur.rowcount > 0
+        with self._lock, self._connect() as conn:
+            cur = conn.execute("DELETE FROM events WHERE id=?", (event_id,))
+            conn.commit()
+            return cur.rowcount > 0
 
     def count_events(self) -> int:
-        with self._lock:
-            with self._connect() as conn:
-                return conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        with self._lock, self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
 
     # --- budget ---
     def add_budget_line(self, line: BudgetLine) -> BudgetLine:
         with self._lock:
             with self._connect() as conn:
                 conn.execute(
-                    "INSERT INTO budget_lines (id,event_id,category,allocated,spent,notes) VALUES (?,?,?,?,?,?)",
-                    (line.id, line.event_id, line.category, line.allocated, line.spent, line.notes),
+                    "INSERT INTO budget_lines (id,event_id,category,allocated,spent,notes) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (
+                        line.id,
+                        line.event_id,
+                        line.category,
+                        line.allocated,
+                        line.spent,
+                        line.notes,
+                    ),
                 )
                 conn.commit()
             return line
@@ -300,17 +341,36 @@ class SQLiteStore:
     def list_budget(self, event_id: str) -> list[BudgetLine]:
         with self._lock:
             with self._connect() as conn:
-                rows = conn.execute("SELECT * FROM budget_lines WHERE event_id=?", (event_id,)).fetchall()
-            return [BudgetLine(id=r["id"], event_id=r["event_id"], category=r["category"],
-                              allocated=r["allocated"], spent=r["spent"], notes=r["notes"]) for r in rows]
+                rows = conn.execute(
+                    "SELECT * FROM budget_lines WHERE event_id=?", (event_id,)
+                ).fetchall()
+            return [
+                BudgetLine(
+                    id=r["id"],
+                    event_id=r["event_id"],
+                    category=r["category"],
+                    allocated=r["allocated"],
+                    spent=r["spent"],
+                    notes=r["notes"],
+                )
+                for r in rows
+            ]
 
     # --- timeline ---
     def add_milestone(self, m: TimelineMilestone) -> TimelineMilestone:
         with self._lock:
             with self._connect() as conn:
                 conn.execute(
-                    "INSERT INTO milestones (id,event_id,title,due_date,status,notes) VALUES (?,?,?,?,?,?)",
-                    (m.id, m.event_id, m.title, m.due_date.isoformat(), m.status, m.notes),
+                    "INSERT INTO milestones (id,event_id,title,due_date,status,notes) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (
+                        m.id,
+                        m.event_id,
+                        m.title,
+                        m.due_date.isoformat(),
+                        m.status,
+                        m.notes,
+                    ),
                 )
                 conn.commit()
             return m
@@ -318,18 +378,39 @@ class SQLiteStore:
     def list_timeline(self, event_id: str) -> list[TimelineMilestone]:
         with self._lock:
             with self._connect() as conn:
-                rows = conn.execute("SELECT * FROM milestones WHERE event_id=? ORDER BY due_date", (event_id,)).fetchall()
-            return [TimelineMilestone(id=r["id"], event_id=r["event_id"], title=r["title"],
-                                     due_date=date.fromisoformat(r["due_date"]), status=r["status"], notes=r["notes"]) for r in rows]
+                rows = conn.execute(
+                    "SELECT * FROM milestones WHERE event_id=? ORDER BY due_date",
+                    (event_id,),
+                ).fetchall()
+            return [
+                TimelineMilestone(
+                    id=r["id"],
+                    event_id=r["event_id"],
+                    title=r["title"],
+                    due_date=date.fromisoformat(r["due_date"]),
+                    status=r["status"],
+                    notes=r["notes"],
+                )
+                for r in rows
+            ]
 
     # --- vendors ---
     def add_vendor(self, v: Vendor) -> Vendor:
         with self._lock:
             with self._connect() as conn:
                 conn.execute(
-                    "INSERT INTO vendors (id,event_id,category,name,status,cost_estimate,contact,notes) VALUES (?,?,?,?,?,?,?,?)",
-                    (v.id, v.event_id, v.category, v.name, v.status.value if hasattr(v.status, "value") else str(v.status),
-                     v.cost_estimate, v.contact, v.notes),
+                    "INSERT INTO vendors (id,event_id,category,name,status,cost_estimate,contact,notes) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    (
+                        v.id,
+                        v.event_id,
+                        v.category,
+                        v.name,
+                        v.status.value if hasattr(v.status, "value") else str(v.status),
+                        v.cost_estimate,
+                        v.contact,
+                        v.notes,
+                    ),
                 )
                 conn.commit()
             return v
@@ -337,16 +418,26 @@ class SQLiteStore:
     def list_vendors(self, event_id: str) -> list[Vendor]:
         with self._lock:
             with self._connect() as conn:
-                rows = conn.execute("SELECT * FROM vendors WHERE event_id=?", (event_id,)).fetchall()
+                rows = conn.execute(
+                    "SELECT * FROM vendors WHERE event_id=?", (event_id,)
+                ).fetchall()
             return [self._row_to_vendor(r) for r in rows]
 
     def update_vendor(self, v: Vendor) -> Vendor:
         with self._lock:
             with self._connect() as conn:
                 cur = conn.execute(
-                    "UPDATE vendors SET category=?,name=?,status=?,cost_estimate=?,contact=?,notes=? WHERE id=?",
-                    (v.category, v.name, v.status.value if hasattr(v.status, "value") else str(v.status),
-                     v.cost_estimate, v.contact, v.notes, v.id),
+                    "UPDATE vendors SET category=?,name=?,status=?,cost_estimate=?,contact=?,notes=? "
+                    "WHERE id=?",
+                    (
+                        v.category,
+                        v.name,
+                        v.status.value if hasattr(v.status, "value") else str(v.status),
+                        v.cost_estimate,
+                        v.contact,
+                        v.notes,
+                        v.id,
+                    ),
                 )
                 conn.commit()
                 if cur.rowcount == 0:
@@ -358,8 +449,16 @@ class SQLiteStore:
         with self._lock:
             with self._connect() as conn:
                 conn.execute(
-                    "INSERT INTO guests (id,event_id,name,rsvp,dietary,plus_one) VALUES (?,?,?,?,?,?)",
-                    (g.id, g.event_id, g.name, g.rsvp, g.dietary, 1 if g.plus_one else 0),
+                    "INSERT INTO guests (id,event_id,name,rsvp,dietary,plus_one) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (
+                        g.id,
+                        g.event_id,
+                        g.name,
+                        g.rsvp,
+                        g.dietary,
+                        1 if g.plus_one else 0,
+                    ),
                 )
                 conn.commit()
             return g
@@ -367,35 +466,64 @@ class SQLiteStore:
     def list_guests(self, event_id: str) -> list[Guest]:
         with self._lock:
             with self._connect() as conn:
-                rows = conn.execute("SELECT * FROM guests WHERE event_id=?", (event_id,)).fetchall()
-            return [Guest(id=r["id"], event_id=r["event_id"], name=r["name"], rsvp=r["rsvp"],
-                          dietary=r["dietary"], plus_one=bool(r["plus_one"])) for r in rows]
+                rows = conn.execute(
+                    "SELECT * FROM guests WHERE event_id=?", (event_id,)
+                ).fetchall()
+            return [
+                Guest(
+                    id=r["id"],
+                    event_id=r["event_id"],
+                    name=r["name"],
+                    rsvp=r["rsvp"],
+                    dietary=r["dietary"],
+                    plus_one=bool(r["plus_one"]),
+                )
+                for r in rows
+            ]
 
     # --- helpers ---
     def _row_to_event(self, r) -> Event:
         from .models import EventType
+
         try:
             et = EventType(r["event_type"])
         except ValueError:
             et = EventType.OTHER
         return Event(
-            id=r["id"], name=r["name"], event_type=et,
-            event_date=date.fromisoformat(r["event_date"]), guest_count=r["guest_count"],
-            budget_total=r["budget_total"], theme=r["theme"], location=r["location"], notes=r["notes"],
-            created_at=datetime.fromisoformat(r["created_at"]), updated_at=datetime.fromisoformat(r["updated_at"]),
+            id=r["id"],
+            name=r["name"],
+            event_type=et,
+            event_date=date.fromisoformat(r["event_date"]),
+            guest_count=r["guest_count"],
+            budget_total=r["budget_total"],
+            theme=r["theme"],
+            location=r["location"],
+            notes=r["notes"],
+            created_at=datetime.fromisoformat(r["created_at"]),
+            updated_at=datetime.fromisoformat(r["updated_at"]),
         )
 
     def _row_to_vendor(self, r) -> Vendor:
         from .models import VendorStatus
+
         try:
             st = VendorStatus(r["status"])
         except ValueError:
             st = VendorStatus.NOT_STARTED
-        return Vendor(id=r["id"], event_id=r["event_id"], category=r["category"], name=r["name"],
-                      status=st, cost_estimate=r["cost_estimate"], contact=r["contact"], notes=r["notes"])
+        return Vendor(
+            id=r["id"],
+            event_id=r["event_id"],
+            category=r["category"],
+            name=r["name"],
+            status=st,
+            cost_estimate=r["cost_estimate"],
+            contact=r["contact"],
+            notes=r["notes"],
+        )
 
 
 def build_store() -> EventStore:
+    """Build the configured event store backend."""
     backend = settings.store_backend.lower()
     if backend == "memory":
         return InMemoryStore()
@@ -403,11 +531,12 @@ def build_store() -> EventStore:
     return SQLiteStore(settings.db_path)
 
 
-_store: Optional[EventStore] = None
+_store: EventStore | None = None
 _store_lock = threading.Lock()
 
 
 def get_store() -> EventStore:
+    """Return the process-wide event store (lazy init)."""
     global _store
     with _store_lock:
         if _store is None:
@@ -415,7 +544,8 @@ def get_store() -> EventStore:
         return _store
 
 
-def reset_store(store: Optional[EventStore] = None) -> None:
+def reset_store(store: EventStore | None = None) -> None:
+    """Reset the process-wide event store (tests)."""
     global _store
     with _store_lock:
         _store = store

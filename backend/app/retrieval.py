@@ -6,6 +6,7 @@ Strategy: cached TF-IDF primary, token-overlap fallback (zero-dep safe).
 Caching: the corpus + vectorizer + matrix are built once and reused
 (bounded memory, sub-second repeat queries).
 """
+
 from __future__ import annotations
 
 import json
@@ -13,8 +14,6 @@ import math
 import re
 import threading
 from pathlib import Path
-from typing import Optional
-
 
 CORPUS_PATH = Path(__file__).resolve().parents[1] / "data" / "ideas_corpus.json"
 
@@ -23,10 +22,12 @@ _cached: dict = {"corpus": None, "vectorizer": None, "matrix": None, "mtime": No
 
 
 def _tokenize(text: str) -> list[str]:
+    """Tokenize text into lowercase alphanumeric tokens."""
     return re.findall(r"[a-z0-9]+", (text or "").lower())
 
 
 def load_corpus() -> list[dict]:
+    """Load the ideas corpus from disk."""
     if not CORPUS_PATH.exists():
         return []
     try:
@@ -35,29 +36,40 @@ def load_corpus() -> list[dict]:
         return []
 
 
-def _build_index(corpus: list[dict]):
+def _build_index(corpus: list[dict]) -> tuple:
     """Build (vectorizer, matrix) or (None, None) on failure."""
     try:
-        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
+
         docs = [c.get("text", "") for c in corpus]
         vec = TfidfVectorizer(stop_words="english")
         matrix = vec.fit_transform(docs)
         return vec, matrix
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None, None
 
 
-def _get_index(corpus: list[dict]):
+def _get_index(corpus: list[dict]) -> tuple:
+    """Return cached (vectorizer, matrix, corpus), rebuilding if needed."""
     global _cached
     mtime = CORPUS_PATH.stat().st_mtime if CORPUS_PATH.exists() else None
     with _cache_lock:
-        if _cached["corpus"] is None or _cached["mtime"] != mtime or len(_cached["corpus"]) != len(corpus):
+        if (
+            _cached["corpus"] is None
+            or _cached["mtime"] != mtime
+            or len(_cached["corpus"]) != len(corpus)
+        ):
             vec, matrix = _build_index(corpus)
-            _cached = {"corpus": list(corpus), "vectorizer": vec, "matrix": matrix, "mtime": mtime}
+            _cached = {
+                "corpus": list(corpus),
+                "vectorizer": vec,
+                "matrix": matrix,
+                "mtime": mtime,
+            }
         return _cached["vectorizer"], _cached["matrix"], _cached["corpus"]
 
 
-def search(query: str, top_k: int = 5, event_type: Optional[str] = None) -> list[dict]:
+def search(query: str, top_k: int = 5, event_type: str | None = None) -> list[dict]:
     """Return top_k corpus entries most relevant to query. Each has 'score' in (0,1]."""
     corpus = load_corpus()
     if event_type:
@@ -66,12 +78,13 @@ def search(query: str, top_k: int = 5, event_type: Optional[str] = None) -> list
         return []
     top_k = max(1, min(top_k, 10))
 
-    vec, matrix, cached_corpus = _get_index(load_corpus())
+    _get_index(load_corpus())
     # filter cached index to event_type subset
     # Rebuild subset index lazily (small corpus) for correctness.
     try:
-        from sklearn.feature_extraction.text import TfidfVectorizer
-        from sklearn.metrics.pairwise import cosine_similarity
+        from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
+        from sklearn.metrics.pairwise import cosine_similarity  # type: ignore[import-untyped]
+
         docs = [c.get("text", "") for c in corpus]
         v = TfidfVectorizer(stop_words="english")
         m = v.fit_transform(docs + [query])
@@ -86,7 +99,7 @@ def search(query: str, top_k: int = 5, event_type: Optional[str] = None) -> list
             out.append(entry)
         if out:
             return out
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     # Fallback: token overlap.
@@ -108,6 +121,7 @@ def search(query: str, top_k: int = 5, event_type: Optional[str] = None) -> list
 
 
 def reset_cache() -> None:
+    """Reset the cached retrieval index."""
     global _cached
     with _cache_lock:
         _cached = {"corpus": None, "vectorizer": None, "matrix": None, "mtime": None}

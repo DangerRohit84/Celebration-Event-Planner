@@ -2,14 +2,17 @@
 
 Pure data classes (no I/O). Validation lives in Pydantic schemas in main.py.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
 
 
 class EventType(str, Enum):
+    """Supported celebration event types."""
+
     WEDDING = "wedding"
     BIRTHDAY = "birthday"
     COMMUNITY = "community"
@@ -18,6 +21,8 @@ class EventType(str, Enum):
 
 
 class VendorStatus(str, Enum):
+    """Lifecycle status of a vendor engagement."""
+
     NOT_STARTED = "not_started"
     RESEARCHING = "researching"
     QUOTED = "quoted"
@@ -28,6 +33,8 @@ class VendorStatus(str, Enum):
 
 @dataclass
 class Event:
+    """A celebration event being planned."""
+
     id: str
     name: str
     event_type: EventType
@@ -37,12 +44,18 @@ class Event:
     theme: str = ""
     location: str = ""
     notes: str = ""
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None)  # noqa: UP017
+    )
+    updated_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None)  # noqa: UP017
+    )
 
 
 @dataclass
 class BudgetLine:
+    """A single budget allocation line for an event."""
+
     id: str
     event_id: str
     category: str
@@ -53,6 +66,8 @@ class BudgetLine:
 
 @dataclass
 class TimelineMilestone:
+    """A milestone on an event's planning timeline."""
+
     id: str
     event_id: str
     title: str
@@ -63,6 +78,8 @@ class TimelineMilestone:
 
 @dataclass
 class Vendor:
+    """A vendor engaged for an event."""
+
     id: str
     event_id: str
     category: str  # venue, catering, decor, photo, music, ...
@@ -75,6 +92,8 @@ class Vendor:
 
 @dataclass
 class Guest:
+    """A guest invited to an event."""
+
     id: str
     event_id: str
     name: str
@@ -85,6 +104,8 @@ class Guest:
 
 @dataclass
 class Chunk:
+    """A retrieved text chunk from an uploaded document."""
+
     chunk_id: str = ""
     doc_id: str = ""
     page: int = 1
@@ -95,11 +116,15 @@ class Chunk:
 
 @dataclass
 class Plan:
-    """Generated plan artifact (budget breakdown + timeline + vendor checklist + ideas)."""
+    """Generated plan artifact."""
+
     event_id: str
     budget_breakdown: list[BudgetLine] = field(default_factory=list)
     timeline: list[TimelineMilestone] = field(default_factory=list)
     vendor_checklist: list[Vendor] = field(default_factory=list)
     ideas: list[str] = field(default_factory=list)
     citations: list[dict] = field(default_factory=list)  # grounded idea sources
-    disclaimer: str = "General planning information only - not professional advice. Verify with vendors and qualified planners."
+    disclaimer: str = (
+        "General planning information only - not professional advice. "
+        "Verify with vendors and qualified planners."
+    )

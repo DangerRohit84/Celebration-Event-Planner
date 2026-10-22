@@ -1,10 +1,13 @@
 """LLM provider port (DIP). Implementations: echo, gemini, openai-compat."""
+
 from __future__ import annotations
 
 from typing import Protocol
 
 
 class LLMProvider(Protocol):
+    """Port for LLM providers (DIP)."""
+
     def answer(self, prompt: str) -> str: ...
 
 
@@ -12,6 +15,7 @@ class EchoProvider:
     """Deterministic offline baseline: returns a trimmed lead of the prompt context."""
 
     def answer(self, prompt: str, *args, **kwargs) -> str:
+        """Return a deterministic lead of the prompt context."""
         # Extract context lines; return first few as a deterministic "idea".
         lines = [ln for ln in prompt.splitlines() if ln.strip()]
         ctx = [ln for ln in lines if ln.startswith("[")]

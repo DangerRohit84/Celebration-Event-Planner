@@ -1,9 +1,11 @@
-﻿"""Alignment tests."""
-from backend.app.prompting import DISCLAIMER, CANNOT_DETERMINE
-from backend.app import main as main_module
-from fastapi.testclient import TestClient
-from backend.app.main import app
+"""Alignment tests."""
+
 import pytest
+from fastapi.testclient import TestClient
+
+from backend.app import main as main_module
+from backend.app.main import app
+from backend.app.prompting import CANNOT_DETERMINE, DISCLAIMER
 
 
 def test_disclaimer_present():
@@ -23,14 +25,33 @@ def client():
 
 
 def test_disclaimer_on_ideas(client):
-    r = client.post("/events", json={"name": "W", "event_type": "wedding", "event_date": "2026-12-01", "budget_total": 1000.0})
+    r = client.post(
+        "/events",
+        json={
+            "name": "W",
+            "event_type": "wedding",
+            "event_date": "2026-12-01",
+            "budget_total": 1000.0,
+        },
+    )
     eid = r.json()["event_id"]
     i = client.post("/ideas", json={"event_id": eid, "query": "outdoor ceremony ideas"})
-    assert "not professional advice" in i.json()["disclaimer"].lower() or "General" in i.json()["disclaimer"]
+    assert (
+        "not professional advice" in i.json()["disclaimer"].lower()
+        or "General" in i.json()["disclaimer"]
+    )
 
 
 def test_export_disclaimer(client):
-    r = client.post("/events", json={"name": "W", "event_type": "wedding", "event_date": "2026-12-01", "budget_total": 1000.0})
+    r = client.post(
+        "/events",
+        json={
+            "name": "W",
+            "event_type": "wedding",
+            "event_date": "2026-12-01",
+            "budget_total": 1000.0,
+        },
+    )
     eid = r.json()["event_id"]
     e = client.post("/export", json={"event_id": eid})
     assert "disclaimer" in e.json()

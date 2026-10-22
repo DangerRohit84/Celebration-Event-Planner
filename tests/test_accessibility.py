@@ -1,6 +1,7 @@
-﻿"""Accessibility tests."""
-from pathlib import Path
+"""Accessibility tests."""
+
 import re
+from pathlib import Path
 
 HTML = Path("frontend/index.html").read_text(encoding="utf-8")
 CSS = Path("frontend/styles.css").read_text(encoding="utf-8")
@@ -24,7 +25,11 @@ def test_live_regions_and_alert():
     assert HTML.count('aria-live="polite"') >= 1
     assert 'role="alert"' in HTML
     assert 'id="errors"' in HTML
-    code_lines = [ln for ln in JS.splitlines() if ln.strip() and not ln.strip().startswith(("//", "/*", "*", "#"))]
+    code_lines = [
+        ln
+        for ln in JS.splitlines()
+        if ln.strip() and not ln.strip().startswith(("//", "/*", "*", "#"))
+    ]
     calls = [ln for ln in code_lines if re.search(r"(^|[^A-Za-z_.])alert\s*\(", ln)]
     assert not calls
 

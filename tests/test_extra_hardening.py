@@ -1,8 +1,10 @@
-﻿"""Extra hardening tests (100/100 push)."""
-from backend.app import main as main_module
-from fastapi.testclient import TestClient
-from backend.app.main import app
+"""Extra hardening tests (100/100 push)."""
+
 import pytest
+from fastapi.testclient import TestClient
+
+from backend.app import main as main_module
+from backend.app.main import app
 
 
 @pytest.fixture()
@@ -37,7 +39,9 @@ def test_update_event_bounds(client):
 
 
 def test_ideas_requires_event(client):
-    r = client.post("/ideas", json={"event_id": "nope", "query": "outdoor ceremony ideas"})
+    r = client.post(
+        "/ideas", json={"event_id": "nope", "query": "outdoor ceremony ideas"}
+    )
     assert r.status_code == 404
 
 

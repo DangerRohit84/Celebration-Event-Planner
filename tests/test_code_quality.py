@@ -1,6 +1,7 @@
-﻿"""Code quality tests."""
-from pathlib import Path
+"""Code quality tests."""
+
 import re
+from pathlib import Path
 
 BACKEND = list((Path("backend/app")).rglob("*.py"))
 
@@ -10,7 +11,7 @@ def test_no_todo_in_app():
     for p in BACKEND + [Path("frontend/app.js")]:
         try:
             text = p.read_text(encoding="utf-8")
-        except Exception:
+        except Exception:  # noqa: BLE001, S112
             continue
         for marker in ("TODO", "FIXME", "HACK"):
             if marker in text:
@@ -21,7 +22,11 @@ def test_no_todo_in_app():
 def test_no_hardcoded_secrets():
     for p in BACKEND:
         text = p.read_text(encoding="utf-8")
-        for pat in (r"AIza[A-Za-z0-9_-]{10,}", r"sk-[A-Za-z0-9]{10,}", r"AKIA[0-9A-Z]{10,}"):
+        for pat in (
+            r"AIza[A-Za-z0-9_-]{10,}",
+            r"sk-[A-Za-z0-9]{10,}",
+            r"AKIA[0-9A-Z]{10,}",
+        ):
             assert not re.search(pat, text), f"secret in {p}"
 
 

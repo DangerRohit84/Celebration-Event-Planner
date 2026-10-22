@@ -1,5 +1,6 @@
 """Retrieval tests."""
-from backend.app.retrieval import search, load_corpus, reset_cache
+
+from backend.app.retrieval import load_corpus, reset_cache, search
 
 
 def test_search_returns_hits():

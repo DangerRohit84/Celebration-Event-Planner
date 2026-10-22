@@ -1,8 +1,10 @@
-﻿"""API tests."""
+"""API tests."""
+
+import pytest
+from fastapi.testclient import TestClient
+
 from backend.app import main as main_module
 from backend.app.main import app
-from fastapi.testclient import TestClient
-import pytest
 
 
 @pytest.fixture()
@@ -25,10 +27,16 @@ def test_root(client):
 
 
 def test_create_event(client):
-    r = client.post("/events", json={
-        "name": "My Wedding", "event_type": "wedding",
-        "event_date": "2026-12-01", "guest_count": 100, "budget_total": 50000.0
-    })
+    r = client.post(
+        "/events",
+        json={
+            "name": "My Wedding",
+            "event_type": "wedding",
+            "event_date": "2026-12-01",
+            "guest_count": 100,
+            "budget_total": 50000.0,
+        },
+    )
     assert r.status_code == 200
     assert "event_id" in r.json()
 
@@ -39,7 +47,16 @@ def test_create_event_validation(client):
 
 
 def test_get_event(client):
-    r = client.post("/events", json={"name": "E", "event_type": "birthday", "event_date": "2026-12-01", "guest_count": 5, "budget_total": 100.0})
+    r = client.post(
+        "/events",
+        json={
+            "name": "E",
+            "event_type": "birthday",
+            "event_date": "2026-12-01",
+            "guest_count": 5,
+            "budget_total": 100.0,
+        },
+    )
     eid = r.json()["event_id"]
     g = client.get(f"/events/{eid}")
     assert g.status_code == 200
@@ -78,9 +95,19 @@ def test_delete_event(client):
 
 
 def test_ideas(client):
-    r = client.post("/events", json={"name": "W", "event_type": "wedding", "event_date": "2026-12-01", "budget_total": 1000.0})
+    r = client.post(
+        "/events",
+        json={
+            "name": "W",
+            "event_type": "wedding",
+            "event_date": "2026-12-01",
+            "budget_total": 1000.0,
+        },
+    )
     eid = r.json()["event_id"]
-    i = client.post("/ideas", json={"event_id": eid, "query": "outdoor ceremony ideas", "top_k": 3})
+    i = client.post(
+        "/ideas", json={"event_id": eid, "query": "outdoor ceremony ideas", "top_k": 3}
+    )
     assert i.status_code == 200
     body = i.json()
     assert "disclaimer" in body
@@ -88,14 +115,30 @@ def test_ideas(client):
 
 
 def test_ask(client):
-    r = client.post("/events", json={"name": "W", "event_type": "wedding", "event_date": "2026-12-01", "budget_total": 1000.0})
+    r = client.post(
+        "/events",
+        json={
+            "name": "W",
+            "event_type": "wedding",
+            "event_date": "2026-12-01",
+            "budget_total": 1000.0,
+        },
+    )
     eid = r.json()["event_id"]
     i = client.post("/ask", json={"event_id": eid, "query": "outdoor ceremony ideas"})
     assert i.status_code == 200
 
 
 def test_export(client):
-    r = client.post("/events", json={"name": "W", "event_type": "wedding", "event_date": "2026-12-01", "budget_total": 1000.0})
+    r = client.post(
+        "/events",
+        json={
+            "name": "W",
+            "event_type": "wedding",
+            "event_date": "2026-12-01",
+            "budget_total": 1000.0,
+        },
+    )
     eid = r.json()["event_id"]
     e = client.post("/export", json={"event_id": eid})
     assert e.status_code == 200
@@ -104,7 +147,9 @@ def test_export(client):
 
 
 def test_upload(client):
-    r = client.post("/upload", files={"file": ("x.pdf", b"%PDF-1.4", "application/pdf")})
+    r = client.post(
+        "/upload", files={"file": ("x.pdf", b"%PDF-1.4", "application/pdf")}
+    )
     assert r.status_code == 200
 
 

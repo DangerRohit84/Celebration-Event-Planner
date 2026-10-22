@@ -1,8 +1,10 @@
 """Max score tests."""
-from backend.app import main as main_module
-from fastapi.testclient import TestClient
-from backend.app.main import app
+
 import pytest
+from fastapi.testclient import TestClient
+
+from backend.app import main as main_module
+from backend.app.main import app
 
 
 @pytest.fixture()
@@ -21,7 +23,15 @@ def test_rate_limit_headers_present(client):
 
 
 def test_ideas_returns_confidence(client):
-    r = client.post("/events", json={"name": "W", "event_type": "wedding", "event_date": "2026-12-01", "budget_total": 1000.0})
+    r = client.post(
+        "/events",
+        json={
+            "name": "W",
+            "event_type": "wedding",
+            "event_date": "2026-12-01",
+            "budget_total": 1000.0,
+        },
+    )
     eid = r.json()["event_id"]
     i = client.post("/ideas", json={"event_id": eid, "query": "outdoor ceremony ideas"})
     assert i.status_code == 200
@@ -29,7 +39,15 @@ def test_ideas_returns_confidence(client):
 
 
 def test_export_shape(client):
-    r = client.post("/events", json={"name": "W", "event_type": "wedding", "event_date": "2026-12-01", "budget_total": 1000.0})
+    r = client.post(
+        "/events",
+        json={
+            "name": "W",
+            "event_type": "wedding",
+            "event_date": "2026-12-01",
+            "budget_total": 1000.0,
+        },
+    )
     eid = r.json()["event_id"]
     e = client.post("/export", json={"event_id": eid})
     assert e.status_code == 200
