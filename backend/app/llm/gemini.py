@@ -9,12 +9,24 @@ class GeminiProvider:
     """Gemini LLM provider."""
 
     def __init__(self):
+        """Create the Gemini client from the configured API key and model.
+
+        Raises:
+            ImportError: When the ``google-genai`` package is not installed.
+        """
         from google import genai  # type: ignore[import-untyped]
 
         self._client = genai.Client(api_key=settings.gemini_api_key)
         self._model = settings.gemini_model
 
     def answer(self, prompt: str) -> str:
-        """Generate an answer from the prompt."""
+        """Generate an answer from the prompt.
+
+        Args:
+            prompt: Prompt text sent to the Gemini model.
+
+        Returns:
+            The generated answer text, stripped of surrounding whitespace.
+        """
         resp = self._client.models.generate_content(model=self._model, contents=prompt)
         return (resp.text or "").strip()

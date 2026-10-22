@@ -9,7 +9,16 @@ EchoGroundedProvider = EchoProvider
 
 
 def build_provider(provider: str | None = None) -> LLMProvider:
-    """Build an LLM provider by name, falling back to echo on import/runtime errors."""
+    """Build an LLM provider by name, falling back to echo on import/runtime errors.
+
+    Args:
+        provider: Provider name to build; defaults to the configured
+            ``settings.llm_provider`` when omitted.
+
+    Returns:
+        The requested provider instance, or a deterministic echo provider when
+        the named provider cannot be loaded.
+    """
     name = (provider or settings.llm_provider).lower()
     if name == "gemini":
         try:
@@ -29,7 +38,15 @@ def build_provider(provider: str | None = None) -> LLMProvider:
 
 
 def get_provider(name: str = "echo") -> LLMProvider:
-    """Legal-style alias for build_provider."""
+    """Legal-style alias for build_provider.
+
+    Args:
+        name: Provider name to build.
+
+    Returns:
+        The requested provider instance, or a deterministic echo provider when
+        the named provider cannot be loaded.
+    """
     # legal-style alias
     if name == "echo":
         return EchoProvider()

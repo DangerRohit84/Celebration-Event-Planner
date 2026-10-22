@@ -16,7 +16,15 @@ load_dotenv()
 
 
 def _int(name: str, default: int) -> int:
-    """Parse an integer env var, falling back to default on failure."""
+    """Parse an integer env var, falling back to default on failure.
+
+    Args:
+        name: Environment variable name to read.
+        default: Value returned when the variable is unset or unparsable.
+
+    Returns:
+        The parsed integer value, or the default.
+    """
     try:
         return int(os.getenv(name, str(default)))
     except (TypeError, ValueError):
@@ -24,7 +32,16 @@ def _int(name: str, default: int) -> int:
 
 
 def _bool(name: str, default: bool) -> bool:
-    """Parse a boolean env var."""
+    """Parse a boolean env var.
+
+    Args:
+        name: Environment variable name to read.
+        default: Value returned when the variable is unset.
+
+    Returns:
+        True when the variable holds a truthy token ("1", "true", "yes", "on"),
+        otherwise False.
+    """
     raw = os.getenv(name)
     if raw is None:
         return default
@@ -61,13 +78,21 @@ class Settings:
 
     @property
     def allowed_origins(self) -> list[str]:
-        """Return the allowlisted frontend origins."""
+        """Return the allowlisted frontend origins.
+
+        Returns:
+            The comma-separated origins split into trimmed, non-empty entries.
+        """
         # Never wildcard; allowlist only.
         return [o.strip() for o in self.frontend_origin.split(",") if o.strip()]
 
     @property
     def db_path(self) -> Path:
-        """Resolve the sqlite file path for local dev."""
+        """Resolve the sqlite file path for local dev.
+
+        Returns:
+            The filesystem path of the SQLite database file.
+        """
         # Resolve sqlite file path for local dev.
         url = self.database_url
         if url.startswith("sqlite:///"):

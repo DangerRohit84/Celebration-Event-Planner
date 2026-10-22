@@ -17,7 +17,16 @@ CANNOT_DETERMINE = "Cannot Determine from the provided context."
 
 
 def build_ideas_prompt(query: str, hits: list[dict], event_type: str) -> str:
-    """Build a grounded ideas prompt from retrieved corpus hits."""
+    """Build a grounded ideas prompt from retrieved corpus hits.
+
+    Args:
+        query: User question the model must answer.
+        hits: Retrieved corpus entries rendered as bracketed source context.
+        event_type: Event type identifier included for event-specific ideas.
+
+    Returns:
+        The rendered prompt text.
+    """
     context = "\n".join(f"[{h.get('id')}] {h.get('text', '')}" for h in hits)
     return (
         "You are a celebration & event planning assistant.\n"
@@ -33,7 +42,16 @@ def build_ideas_prompt(query: str, hits: list[dict], event_type: str) -> str:
 
 
 def build_grounded_prompt(query: str, hits, plain_language: bool = False) -> str:
-    """Alias used by hardening tests; wraps build_ideas_prompt."""
+    """Alias used by hardening tests; wraps build_ideas_prompt.
+
+    Args:
+        query: User question the model must answer.
+        hits: Retrieved corpus entries; non-list values are ignored.
+        plain_language: When True, append an instruction for plain-language output.
+
+    Returns:
+        The rendered prompt text.
+    """
     et = "all"
     if isinstance(hits, list) and hits and isinstance(hits[0], dict):
         et = hits[0].get("event_type", "all") if isinstance(hits[0], dict) else "all"
@@ -44,7 +62,14 @@ def build_grounded_prompt(query: str, hits, plain_language: bool = False) -> str
 
 
 def calibrate_confidence(hits: list[dict]) -> str:
-    """Calibrate a confidence label from retrieved hits."""
+    """Calibrate a confidence label from retrieved hits.
+
+    Args:
+        hits: Retrieved corpus entries carrying similarity scores.
+
+    Returns:
+        "Grounded", "Partial", or "Cannot Determine".
+    """
     if not hits:
         return "Cannot Determine"
     scores = [h.get("score", 0.0) for h in hits]
@@ -59,7 +84,16 @@ def calibrate_confidence(hits: list[dict]) -> str:
 def confidence_for(
     hits: list, count: int = 0, scores: list[float] | None = None
 ) -> str:
-    """Score-calibrated confidence with count fallback (mirrors legal)."""
+    """Score-calibrated confidence with count fallback (mirrors legal).
+
+    Args:
+        hits: Retrieved entries whose scores are read when ``scores`` is absent.
+        count: Optional explicit hit count used when scores are unavailable.
+        scores: Optional pre-computed similarity scores for the hits.
+
+    Returns:
+        "Grounded", "Partial", or "Cannot Determine".
+    """
     if not hits:
         return "Cannot Determine"
     if scores is None:
@@ -85,5 +119,12 @@ def confidence_for(
 
 # Alias for legal-style naming
 def confidence_calibrate(hits: list[dict]) -> str:
-    """Alias for calibrate_confidence."""
+    """Alias for calibrate_confidence.
+
+    Args:
+        hits: Retrieved corpus entries carrying similarity scores.
+
+    Returns:
+        "Grounded", "Partial", or "Cannot Determine".
+    """
     return calibrate_confidence(hits)

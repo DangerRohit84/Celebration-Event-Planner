@@ -9,6 +9,11 @@ class OpenAICompatProvider:
     """OpenAI-compatible LLM provider."""
 
     def __init__(self):
+        """Create the OpenAI-compatible client from the configured credentials.
+
+        Raises:
+            ImportError: When the ``openai`` package is not installed.
+        """
         from openai import OpenAI  # type: ignore[import-untyped]
 
         self._client = OpenAI(
@@ -17,7 +22,14 @@ class OpenAICompatProvider:
         self._model = settings.openai_model
 
     def answer(self, prompt: str) -> str:
-        """Generate an answer from the prompt."""
+        """Generate an answer from the prompt.
+
+        Args:
+            prompt: Prompt text sent as the single user message.
+
+        Returns:
+            The generated answer text, stripped of surrounding whitespace.
+        """
         resp = self._client.chat.completions.create(
             model=self._model,
             messages=[{"role": "user", "content": prompt}],

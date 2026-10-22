@@ -22,7 +22,11 @@ from .models import BudgetLine, Event, Guest, TimelineMilestone, Vendor
 
 
 def new_id() -> str:
-    """Generate a new unique id."""
+    """Generate a new unique id.
+
+    Returns:
+        A hexadecimal identifier derived from a fresh UUID4.
+    """
     return uuid.uuid4().hex
 
 
@@ -33,25 +37,177 @@ class CapacityError(Exception):
 class EventStore(Protocol):
     """Repository contract. Implementations must be thread-safe."""
 
-    def create_event(self, event: Event) -> Event: ...
-    def get_event(self, event_id: str) -> Event | None: ...
-    def list_events(self, limit: int = 100, offset: int = 0) -> list[Event]: ...
-    def update_event(self, event: Event) -> Event: ...
-    def delete_event(self, event_id: str) -> bool: ...
-    def count_events(self) -> int: ...
+    def create_event(self, event: Event) -> Event:
+        """Create and persist a new event.
 
-    def add_budget_line(self, line: BudgetLine) -> BudgetLine: ...
-    def list_budget(self, event_id: str) -> list[BudgetLine]: ...
+        Args:
+            event: Event to persist, keyed by its own identifier.
 
-    def add_milestone(self, m: TimelineMilestone) -> TimelineMilestone: ...
-    def list_timeline(self, event_id: str) -> list[TimelineMilestone]: ...
+        Returns:
+            The persisted event.
 
-    def add_vendor(self, v: Vendor) -> Vendor: ...
-    def list_vendors(self, event_id: str) -> list[Vendor]: ...
-    def update_vendor(self, v: Vendor) -> Vendor: ...
+        Raises:
+            CapacityError: When the bounded event store is saturated.
+        """
+        ...
 
-    def add_guest(self, g: Guest) -> Guest: ...
-    def list_guests(self, event_id: str) -> list[Guest]: ...
+    def get_event(self, event_id: str) -> Event | None:
+        """Look up a single event by identifier.
+
+        Args:
+            event_id: Identifier of the event to retrieve.
+
+        Returns:
+            The stored event, or None when no event has that identifier.
+        """
+        ...
+
+    def list_events(self, limit: int = 100, offset: int = 0) -> list[Event]:
+        """List stored events with pagination.
+
+        Args:
+            limit: Maximum number of events to return.
+            offset: Number of events to skip before collecting results.
+
+        Returns:
+            The requested page of stored events.
+        """
+        ...
+
+    def update_event(self, event: Event) -> Event:
+        """Replace an existing event with the supplied values.
+
+        Args:
+            event: Event carrying the new values; its identifier is the key.
+
+        Returns:
+            The updated event.
+
+        Raises:
+            KeyError: When no event with that identifier is stored.
+        """
+        ...
+
+    def delete_event(self, event_id: str) -> bool:
+        """Delete an event and its dependent records.
+
+        Args:
+            event_id: Identifier of the event to delete.
+
+        Returns:
+            True when an event was removed, False when the identifier is unknown.
+        """
+        ...
+
+    def count_events(self) -> int:
+        """Count the stored events.
+
+        Returns:
+            The number of events currently stored.
+        """
+        ...
+
+    def add_budget_line(self, line: BudgetLine) -> BudgetLine:
+        """Append a budget line to an event.
+
+        Args:
+            line: Budget line to store against its event.
+
+        Returns:
+            The stored budget line.
+        """
+        ...
+
+    def list_budget(self, event_id: str) -> list[BudgetLine]:
+        """List the budget lines of an event.
+
+        Args:
+            event_id: Identifier of the event whose budget is requested.
+
+        Returns:
+            The budget lines for the event, empty when it has none.
+        """
+        ...
+
+    def add_milestone(self, m: TimelineMilestone) -> TimelineMilestone:
+        """Append a timeline milestone to an event.
+
+        Args:
+            m: Milestone to store against its event.
+
+        Returns:
+            The stored milestone.
+        """
+        ...
+
+    def list_timeline(self, event_id: str) -> list[TimelineMilestone]:
+        """List the timeline milestones of an event.
+
+        Args:
+            event_id: Identifier of the event whose timeline is requested.
+
+        Returns:
+            The milestones for the event, empty when it has none.
+        """
+        ...
+
+    def add_vendor(self, v: Vendor) -> Vendor:
+        """Append a vendor to an event.
+
+        Args:
+            v: Vendor to store against its event.
+
+        Returns:
+            The stored vendor.
+        """
+        ...
+
+    def list_vendors(self, event_id: str) -> list[Vendor]:
+        """List the vendors of an event.
+
+        Args:
+            event_id: Identifier of the event whose vendors are requested.
+
+        Returns:
+            The vendors for the event, empty when it has none.
+        """
+        ...
+
+    def update_vendor(self, v: Vendor) -> Vendor:
+        """Replace an existing vendor with the supplied values.
+
+        Args:
+            v: Vendor carrying the new values; its identifier is the key.
+
+        Returns:
+            The updated vendor.
+
+        Raises:
+            KeyError: When no vendor with that identifier is stored.
+        """
+        ...
+
+    def add_guest(self, g: Guest) -> Guest:
+        """Append a guest to an event.
+
+        Args:
+            g: Guest to store against its event.
+
+        Returns:
+            The stored guest.
+        """
+        ...
+
+    def list_guests(self, event_id: str) -> list[Guest]:
+        """List the guests of an event.
+
+        Args:
+            event_id: Identifier of the event whose guests are requested.
+
+        Returns:
+            The guests for the event, empty when it has none.
+        """
+        ...
 
 
 # ---------- In-memory backend (tests + ephemeral) ----------
@@ -61,6 +217,12 @@ class InMemoryStore:
     """In-memory event store (tests + ephemeral)."""
 
     def __init__(self, max_events: int | None = None):
+        """Initialize an empty in-memory store.
+
+        Args:
+            max_events: Maximum number of events to hold; defaults to the
+                configured ``settings.max_store_events`` limit.
+        """
         self._max = max_events if max_events is not None else settings.max_store_events
         self._events: dict[str, Event] = {}
         self._budget: dict[str, list[BudgetLine]] = {}
@@ -70,10 +232,26 @@ class InMemoryStore:
         self._lock = threading.Lock()
 
     def _guard_capacity(self) -> None:
+        """Ensure the store is not already holding the maximum event count.
+
+        Raises:
+            CapacityError: When the bounded event store is saturated.
+        """
         if len(self._events) >= self._max:
             raise CapacityError("event store full")
 
     def create_event(self, event: Event) -> Event:
+        """Create and persist a new event in memory.
+
+        Args:
+            event: Event to persist, keyed by its own identifier.
+
+        Returns:
+            The persisted event.
+
+        Raises:
+            CapacityError: When the bounded event store is saturated.
+        """
         with self._lock:
             self._guard_capacity()
             self._events[event.id] = event
@@ -84,15 +262,43 @@ class InMemoryStore:
             return event
 
     def get_event(self, event_id: str) -> Event | None:
+        """Look up a single event by identifier.
+
+        Args:
+            event_id: Identifier of the event to retrieve.
+
+        Returns:
+            The stored event, or None when no event has that identifier.
+        """
         with self._lock:
             return self._events.get(event_id)
 
     def list_events(self, limit: int = 100, offset: int = 0) -> list[Event]:
+        """List stored events with pagination.
+
+        Args:
+            limit: Maximum number of events to return.
+            offset: Number of events to skip before collecting results.
+
+        Returns:
+            The requested page of stored events.
+        """
         with self._lock:
             items = list(self._events.values())
             return items[offset : offset + limit]
 
     def update_event(self, event: Event) -> Event:
+        """Replace an existing event with the supplied values.
+
+        Args:
+            event: Event carrying the new values; its identifier is the key.
+
+        Returns:
+            The updated event.
+
+        Raises:
+            KeyError: When no event with that identifier is stored.
+        """
         with self._lock:
             if event.id not in self._events:
                 raise KeyError(event.id)
@@ -100,6 +306,14 @@ class InMemoryStore:
             return event
 
     def delete_event(self, event_id: str) -> bool:
+        """Delete an event and its dependent records.
+
+        Args:
+            event_id: Identifier of the event to delete.
+
+        Returns:
+            True when an event was removed, False when the identifier is unknown.
+        """
         with self._lock:
             if event_id not in self._events:
                 return False
@@ -111,37 +325,101 @@ class InMemoryStore:
             return True
 
     def count_events(self) -> int:
+        """Count the stored events.
+
+        Returns:
+            The number of events currently stored.
+        """
         with self._lock:
             return len(self._events)
 
     def add_budget_line(self, line: BudgetLine) -> BudgetLine:
+        """Append a budget line to an event.
+
+        Args:
+            line: Budget line to store against its event.
+
+        Returns:
+            The stored budget line.
+        """
         with self._lock:
             self._budget.setdefault(line.event_id, []).append(line)
             return line
 
     def list_budget(self, event_id: str) -> list[BudgetLine]:
+        """List the budget lines of an event.
+
+        Args:
+            event_id: Identifier of the event whose budget is requested.
+
+        Returns:
+            The budget lines for the event, empty when it has none.
+        """
         with self._lock:
             return list(self._budget.get(event_id, []))
 
     def add_milestone(self, m: TimelineMilestone) -> TimelineMilestone:
+        """Append a timeline milestone to an event.
+
+        Args:
+            m: Milestone to store against its event.
+
+        Returns:
+            The stored milestone.
+        """
         with self._lock:
             self._timeline.setdefault(m.event_id, []).append(m)
             return m
 
     def list_timeline(self, event_id: str) -> list[TimelineMilestone]:
+        """List the timeline milestones of an event.
+
+        Args:
+            event_id: Identifier of the event whose timeline is requested.
+
+        Returns:
+            The milestones for the event, empty when it has none.
+        """
         with self._lock:
             return list(self._timeline.get(event_id, []))
 
     def add_vendor(self, v: Vendor) -> Vendor:
+        """Append a vendor to an event.
+
+        Args:
+            v: Vendor to store against its event.
+
+        Returns:
+            The stored vendor.
+        """
         with self._lock:
             self._vendors.setdefault(v.event_id, []).append(v)
             return v
 
     def list_vendors(self, event_id: str) -> list[Vendor]:
+        """List the vendors of an event.
+
+        Args:
+            event_id: Identifier of the event whose vendors are requested.
+
+        Returns:
+            The vendors for the event, empty when it has none.
+        """
         with self._lock:
             return list(self._vendors.get(event_id, []))
 
     def update_vendor(self, v: Vendor) -> Vendor:
+        """Replace an existing vendor with the supplied values.
+
+        Args:
+            v: Vendor carrying the new values; its identifier is the key.
+
+        Returns:
+            The updated vendor.
+
+        Raises:
+            KeyError: When no vendor with that identifier is stored.
+        """
         with self._lock:
             lst = self._vendors.get(v.event_id, [])
             for i, existing in enumerate(lst):
@@ -151,11 +429,27 @@ class InMemoryStore:
             raise KeyError(v.id)
 
     def add_guest(self, g: Guest) -> Guest:
+        """Append a guest to an event.
+
+        Args:
+            g: Guest to store against its event.
+
+        Returns:
+            The stored guest.
+        """
         with self._lock:
             self._guests.setdefault(g.event_id, []).append(g)
             return g
 
     def list_guests(self, event_id: str) -> list[Guest]:
+        """List the guests of an event.
+
+        Args:
+            event_id: Identifier of the event whose guests are requested.
+
+        Returns:
+            The guests for the event, empty when it has none.
+        """
         with self._lock:
             return list(self._guests.get(event_id, []))
 
@@ -221,6 +515,13 @@ class SQLiteStore:
     """
 
     def __init__(self, db_path: str | Path, max_events: int | None = None):
+        """Initialize the store and create the SQLite schema if needed.
+
+        Args:
+            db_path: Filesystem path of the SQLite database file.
+            max_events: Maximum number of events to hold; defaults to the
+                configured ``settings.max_store_events`` limit.
+        """
         self._path = Path(db_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._max = max_events if max_events is not None else settings.max_store_events
@@ -230,6 +531,11 @@ class SQLiteStore:
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
+        """Open a SQLite connection with row access and foreign keys enabled.
+
+        Returns:
+            A new connection configured for dictionary-like row access.
+        """
         conn = sqlite3.connect(str(self._path), timeout=10.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
@@ -237,6 +543,17 @@ class SQLiteStore:
 
     # --- events ---
     def create_event(self, event: Event) -> Event:
+        """Create and persist a new event in SQLite.
+
+        Args:
+            event: Event to persist, keyed by its own identifier.
+
+        Returns:
+            The persisted event.
+
+        Raises:
+            CapacityError: When the bounded event store is saturated.
+        """
         with self._lock:
             # count without re-locking
             with self._connect() as conn:
@@ -267,6 +584,14 @@ class SQLiteStore:
             return event
 
     def get_event(self, event_id: str) -> Event | None:
+        """Look up a single event by identifier.
+
+        Args:
+            event_id: Identifier of the event to retrieve.
+
+        Returns:
+            The stored event, or None when no event has that identifier.
+        """
         with self._lock:
             with self._connect() as conn:
                 row = conn.execute(
@@ -275,6 +600,15 @@ class SQLiteStore:
             return self._row_to_event(row) if row else None
 
     def list_events(self, limit: int = 100, offset: int = 0) -> list[Event]:
+        """List stored events with pagination, newest first.
+
+        Args:
+            limit: Maximum number of events to return.
+            offset: Number of events to skip before collecting results.
+
+        Returns:
+            The requested page of stored events.
+        """
         with self._lock:
             with self._connect() as conn:
                 rows = conn.execute(
@@ -284,6 +618,17 @@ class SQLiteStore:
             return [self._row_to_event(r) for r in rows]
 
     def update_event(self, event: Event) -> Event:
+        """Replace an existing event with the supplied values.
+
+        Args:
+            event: Event carrying the new values; its identifier is the key.
+
+        Returns:
+            The updated event.
+
+        Raises:
+            KeyError: When no event with that identifier is stored.
+        """
         with self._lock:
             with self._connect() as conn:
                 cur = conn.execute(
@@ -310,17 +655,38 @@ class SQLiteStore:
             return event
 
     def delete_event(self, event_id: str) -> bool:
+        """Delete an event and its dependent records.
+
+        Args:
+            event_id: Identifier of the event to delete.
+
+        Returns:
+            True when an event was removed, False when the identifier is unknown.
+        """
         with self._lock, self._connect() as conn:
             cur = conn.execute("DELETE FROM events WHERE id=?", (event_id,))
             conn.commit()
             return cur.rowcount > 0
 
     def count_events(self) -> int:
+        """Count the stored events.
+
+        Returns:
+            The number of events currently stored.
+        """
         with self._lock, self._connect() as conn:
             return conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
 
     # --- budget ---
     def add_budget_line(self, line: BudgetLine) -> BudgetLine:
+        """Append a budget line to an event.
+
+        Args:
+            line: Budget line to store against its event.
+
+        Returns:
+            The stored budget line.
+        """
         with self._lock:
             with self._connect() as conn:
                 conn.execute(
@@ -339,6 +705,14 @@ class SQLiteStore:
             return line
 
     def list_budget(self, event_id: str) -> list[BudgetLine]:
+        """List the budget lines of an event.
+
+        Args:
+            event_id: Identifier of the event whose budget is requested.
+
+        Returns:
+            The budget lines for the event, empty when it has none.
+        """
         with self._lock:
             with self._connect() as conn:
                 rows = conn.execute(
@@ -358,6 +732,14 @@ class SQLiteStore:
 
     # --- timeline ---
     def add_milestone(self, m: TimelineMilestone) -> TimelineMilestone:
+        """Append a timeline milestone to an event.
+
+        Args:
+            m: Milestone to store against its event.
+
+        Returns:
+            The stored milestone.
+        """
         with self._lock:
             with self._connect() as conn:
                 conn.execute(
@@ -376,6 +758,14 @@ class SQLiteStore:
             return m
 
     def list_timeline(self, event_id: str) -> list[TimelineMilestone]:
+        """List the timeline milestones of an event in due-date order.
+
+        Args:
+            event_id: Identifier of the event whose timeline is requested.
+
+        Returns:
+            The milestones for the event, empty when it has none.
+        """
         with self._lock:
             with self._connect() as conn:
                 rows = conn.execute(
@@ -396,6 +786,14 @@ class SQLiteStore:
 
     # --- vendors ---
     def add_vendor(self, v: Vendor) -> Vendor:
+        """Append a vendor to an event.
+
+        Args:
+            v: Vendor to store against its event.
+
+        Returns:
+            The stored vendor.
+        """
         with self._lock:
             with self._connect() as conn:
                 conn.execute(
@@ -416,6 +814,14 @@ class SQLiteStore:
             return v
 
     def list_vendors(self, event_id: str) -> list[Vendor]:
+        """List the vendors of an event.
+
+        Args:
+            event_id: Identifier of the event whose vendors are requested.
+
+        Returns:
+            The vendors for the event, empty when it has none.
+        """
         with self._lock:
             with self._connect() as conn:
                 rows = conn.execute(
@@ -424,6 +830,17 @@ class SQLiteStore:
             return [self._row_to_vendor(r) for r in rows]
 
     def update_vendor(self, v: Vendor) -> Vendor:
+        """Replace an existing vendor with the supplied values.
+
+        Args:
+            v: Vendor carrying the new values; its identifier is the key.
+
+        Returns:
+            The updated vendor.
+
+        Raises:
+            KeyError: When no vendor with that identifier is stored.
+        """
         with self._lock:
             with self._connect() as conn:
                 cur = conn.execute(
@@ -446,6 +863,14 @@ class SQLiteStore:
 
     # --- guests ---
     def add_guest(self, g: Guest) -> Guest:
+        """Append a guest to an event.
+
+        Args:
+            g: Guest to store against its event.
+
+        Returns:
+            The stored guest.
+        """
         with self._lock:
             with self._connect() as conn:
                 conn.execute(
@@ -464,6 +889,14 @@ class SQLiteStore:
             return g
 
     def list_guests(self, event_id: str) -> list[Guest]:
+        """List the guests of an event.
+
+        Args:
+            event_id: Identifier of the event whose guests are requested.
+
+        Returns:
+            The guests for the event, empty when it has none.
+        """
         with self._lock:
             with self._connect() as conn:
                 rows = conn.execute(
@@ -483,6 +916,14 @@ class SQLiteStore:
 
     # --- helpers ---
     def _row_to_event(self, r) -> Event:
+        """Convert a database row into an event entity.
+
+        Args:
+            r: Row read from the ``events`` table.
+
+        Returns:
+            The corresponding event entity.
+        """
         from .models import EventType
 
         try:
@@ -504,6 +945,14 @@ class SQLiteStore:
         )
 
     def _row_to_vendor(self, r) -> Vendor:
+        """Convert a database row into a vendor entity.
+
+        Args:
+            r: Row read from the ``vendors`` table.
+
+        Returns:
+            The corresponding vendor entity.
+        """
         from .models import VendorStatus
 
         try:
@@ -523,7 +972,12 @@ class SQLiteStore:
 
 
 def build_store() -> EventStore:
-    """Build the configured event store backend."""
+    """Build the event store backend selected by configuration.
+
+    Returns:
+        An in-memory store when ``STORE_BACKEND`` is ``memory``, otherwise a
+        SQLite-backed store.
+    """
     backend = settings.store_backend.lower()
     if backend == "memory":
         return InMemoryStore()
@@ -536,7 +990,11 @@ _store_lock = threading.Lock()
 
 
 def get_store() -> EventStore:
-    """Return the process-wide event store (lazy init)."""
+    """Return the process-wide event store, initializing it on first use.
+
+    Returns:
+        The shared event store instance for the configured backend.
+    """
     global _store
     with _store_lock:
         if _store is None:
@@ -545,7 +1003,12 @@ def get_store() -> EventStore:
 
 
 def reset_store(store: EventStore | None = None) -> None:
-    """Reset the process-wide event store (tests)."""
+    """Replace the process-wide event store (tests).
+
+    Args:
+        store: Replacement store instance; None clears the cached store so the
+            next :func:`get_store` call rebuilds it from configuration.
+    """
     global _store
     with _store_lock:
         _store = store

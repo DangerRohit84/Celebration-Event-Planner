@@ -27,7 +27,14 @@ router = APIRouter()
 
 
 def _parse_event_type(value: str) -> EventType:
-    """Parse an event type string, defaulting to OTHER."""
+    """Parse an event type string, defaulting to OTHER.
+
+    Args:
+        value: Raw event type identifier from the client.
+
+    Returns:
+        The matching event type, or EventType.OTHER for unknown values.
+    """
     try:
         return EventType(value)
     except ValueError:
@@ -36,13 +43,21 @@ def _parse_event_type(value: str) -> EventType:
 
 @router.get("/health")
 def health() -> dict:
-    """Health check endpoint."""
+    """Health check endpoint.
+
+    Returns:
+        A mapping with the service status and the active LLM provider.
+    """
     return {"status": "ok", "provider": settings.llm_provider}
 
 
 @router.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
-    """Serve the frontend index page, falling back to a minimal page."""
+    """Serve the frontend index page, falling back to a minimal page.
+
+    Returns:
+        The frontend HTML, or a minimal placeholder page when it is unreadable.
+    """
     p = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
     try:
         if p.exists():
@@ -54,7 +69,19 @@ def index() -> HTMLResponse:
 
 @router.post("/events")
 def create_event(payload: EventCreate, request: Request) -> dict:
-    """Create a new event with budget, timeline, and vendors."""
+    """Create a new event with budget, timeline, and vendors.
+
+    Args:
+        payload: Validated event details supplied by the client.
+        request: Incoming request, reserved for session isolation.
+
+    Returns:
+        A mapping with the new event identifier and name.
+
+    Raises:
+        HTTPException: With status 400 for invalid dates and status 429 when
+            the event store is at capacity.
+    """
     store = get_store()
     try:
         ev = Event(
@@ -85,7 +112,16 @@ def create_event(payload: EventCreate, request: Request) -> dict:
 
 @router.get("/events")
 def list_events(request: Request, limit: int = 50, offset: int = 0) -> dict:
-    """List events with pagination."""
+    """List events with pagination.
+
+    Args:
+        request: Incoming request, reserved for session isolation.
+        limit: Maximum number of events to return, clamped to 1..100.
+        offset: Number of events to skip before collecting results.
+
+    Returns:
+        A mapping with the requested page of event summaries.
+    """
     limit = max(1, min(limit, 100))
     offset = max(0, offset)
     store = get_store()
@@ -97,7 +133,18 @@ def list_events(request: Request, limit: int = 50, offset: int = 0) -> dict:
 
 @router.get("/events/{event_id}")
 def get_event(event_id: str, request: Request) -> dict:
-    """Get a single event with its budget, timeline, and vendors."""
+    """Get a single event with its budget, timeline, and vendors.
+
+    Args:
+        event_id: Identifier of the event to retrieve.
+        request: Incoming request, reserved for session isolation.
+
+    Returns:
+        A mapping with the event, its budget lines, timeline, and vendors.
+
+    Raises:
+        HTTPException: With status 404 when the event does not exist.
+    """
     store = get_store()
     ev = store.get_event(event_id)
     if not ev:
@@ -114,7 +161,20 @@ def get_event(event_id: str, request: Request) -> dict:
 
 @router.put("/events/{event_id}")
 def update_event(event_id: str, payload: EventUpdate, request: Request) -> dict:
-    """Update an existing event."""
+    """Update an existing event.
+
+    Args:
+        event_id: Identifier of the event to update.
+        payload: Validated fields to apply; omitted fields are left unchanged.
+        request: Incoming request, reserved for session isolation.
+
+    Returns:
+        A mapping with the event identifier and an update confirmation.
+
+    Raises:
+        HTTPException: With status 404 when the event does not exist and
+            status 400 for an unparsable date.
+    """
     store = get_store()
     ev = store.get_event(event_id)
     if not ev:
@@ -145,7 +205,18 @@ def update_event(event_id: str, payload: EventUpdate, request: Request) -> dict:
 
 @router.delete("/events/{event_id}")
 def delete_event(event_id: str, request: Request) -> dict:
-    """Delete an event."""
+    """Delete an event.
+
+    Args:
+        event_id: Identifier of the event to delete.
+        request: Incoming request, reserved for session isolation.
+
+    Returns:
+        A mapping confirming the deletion.
+
+    Raises:
+        HTTPException: With status 404 when the event does not exist.
+    """
     store = get_store()
     if not store.delete_event(event_id):
         raise HTTPException(status_code=404, detail="not found")
@@ -153,7 +224,20 @@ def delete_event(event_id: str, request: Request) -> dict:
 
 
 def _run_ideas(event_id: str, query: str, top_k: int) -> dict:
-    """Run idea generation for an event."""
+    """Run idea generation for an event.
+
+    Args:
+        event_id: Identifier of the event the ideas belong to.
+        query: User question to ground the ideas in.
+        top_k: Maximum number of corpus entries to retrieve.
+
+    Returns:
+        A mapping with the ideas, their confidence label, citations, and the
+        disclaimer; a "Cannot Determine" payload when nothing was retrieved.
+
+    Raises:
+        HTTPException: With status 404 when the event does not exist.
+    """
     store = get_store()
     ev = store.get_event(event_id)
     if not ev:
@@ -181,13 +265,36 @@ def _run_ideas(event_id: str, query: str, top_k: int) -> dict:
 
 @router.post("/ideas")
 def ideas(payload: IdeasRequest, request: Request) -> dict:
-    """Generate ideas for an event."""
+    """Generate ideas for an event.
+
+    Args:
+        payload: Validated idea request carrying the event, query, and top_k.
+        request: Incoming request, reserved for session isolation.
+
+    Returns:
+        A mapping with the ideas, confidence, citations, and disclaimer.
+
+    Raises:
+        HTTPException: With status 404 when the event does not exist.
+    """
     return _run_ideas(payload.event_id, payload.query, payload.top_k)
 
 
 @router.post("/ask")
 def ask(payload: AskRequest, request: Request) -> dict:
-    """Ask a planning question for an event."""
+    """Ask a planning question for an event.
+
+    Args:
+        payload: Validated question carrying the event id, query, and top_k.
+        request: Incoming request, reserved for session isolation.
+
+    Returns:
+        A mapping with the ideas, confidence, citations, and disclaimer.
+
+    Raises:
+        HTTPException: With status 422 for a missing or too-short query and
+            status 404 when the event does not exist.
+    """
     eid = payload.event_id
     q = payload.query or payload.question
     if not eid or not q:
@@ -199,7 +306,18 @@ def ask(payload: AskRequest, request: Request) -> dict:
 
 @router.post("/export")
 def export_event(payload: ExportRequest, request: Request) -> dict:
-    """Export an event plan."""
+    """Export an event plan.
+
+    Args:
+        payload: Validated export request carrying the event identifier.
+        request: Incoming request, reserved for session isolation.
+
+    Returns:
+        A mapping with the event, its budget, timeline, vendors, and disclaimer.
+
+    Raises:
+        HTTPException: With status 404 when the event does not exist.
+    """
     eid = payload.event_id
     store = get_store()
     ev = store.get_event(eid)
@@ -219,7 +337,19 @@ def export_event(payload: ExportRequest, request: Request) -> dict:
 
 @router.post("/upload")
 async def upload(request: Request, file: UploadFile = File(...)) -> dict:  # noqa: B008
-    """Upload a PDF document."""
+    """Upload a PDF document.
+
+    Args:
+        request: Incoming request, reserved for session isolation.
+        file: Uploaded PDF payload, read with a bounded buffer.
+
+    Returns:
+        A mapping with the sanitized filename, size, and acceptance status.
+
+    Raises:
+        HTTPException: With status 413 when the file exceeds the size limit and
+            status 400 when it fails PDF pre-parse validation.
+    """
     raw = await file.read(settings.max_upload_bytes + 1)
     if len(raw) > settings.max_upload_bytes:
         raise HTTPException(status_code=413, detail="file too large (10 MB limit)")

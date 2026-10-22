@@ -112,7 +112,15 @@ MILESTONE_OFFSETS: list[tuple[int, str]] = [
 
 
 def budget_breakdown(event: Event) -> list[BudgetLine]:
-    """Generate a budget breakdown for an event using its template."""
+    """Generate a budget breakdown for an event using its template.
+
+    Args:
+        event: Event whose total budget and type drive the allocation.
+
+    Returns:
+        One budget line per template category, with allocated amounts rounded
+        to two decimals.
+    """
     template = BUDGET_TEMPLATES.get(
         event.event_type.value
         if hasattr(event.event_type, "value")
@@ -133,7 +141,15 @@ def budget_breakdown(event: Event) -> list[BudgetLine]:
 
 
 def timeline_for(event: Event) -> list[TimelineMilestone]:
-    """Generate a planning timeline for an event."""
+    """Generate a planning timeline for an event.
+
+    Args:
+        event: Event whose date anchors the milestone due dates.
+
+    Returns:
+        The milestones sorted by due date; past-dated milestones are clamped
+        to today.
+    """
     milestones: list[TimelineMilestone] = []
     for offset, title in MILESTONE_OFFSETS:
         due = event.event_date - timedelta(days=offset)
@@ -152,7 +168,14 @@ def timeline_for(event: Event) -> list[TimelineMilestone]:
 
 
 def vendor_checklist(event: Event) -> list[Vendor]:
-    """Generate a vendor checklist for an event."""
+    """Generate a vendor checklist for an event.
+
+    Args:
+        event: Event whose type selects the vendor categories.
+
+    Returns:
+        One unbooked vendor entry per category in the event type's checklist.
+    """
     et = (
         event.event_type.value
         if hasattr(event.event_type, "value")
@@ -163,5 +186,12 @@ def vendor_checklist(event: Event) -> list[Vendor]:
 
 
 def total_allocated(lines: list[BudgetLine]) -> float:
-    """Return the total allocated budget across lines."""
+    """Return the total allocated budget across lines.
+
+    Args:
+        lines: Budget lines to sum.
+
+    Returns:
+        The sum of the allocated amounts, rounded to two decimals.
+    """
     return round(sum(line.allocated for line in lines), 2)

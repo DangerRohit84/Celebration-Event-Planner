@@ -22,12 +22,24 @@ _cached: dict = {"corpus": None, "vectorizer": None, "matrix": None, "mtime": No
 
 
 def _tokenize(text: str) -> list[str]:
-    """Tokenize text into lowercase alphanumeric tokens."""
+    """Tokenize text into lowercase alphanumeric tokens.
+
+    Args:
+        text: Raw text to tokenize.
+
+    Returns:
+        The lowercase alphanumeric tokens found in the text.
+    """
     return re.findall(r"[a-z0-9]+", (text or "").lower())
 
 
 def load_corpus() -> list[dict]:
-    """Load the ideas corpus from disk."""
+    """Load the ideas corpus from disk.
+
+    Returns:
+        The parsed corpus entries, or an empty list when the file is missing
+        or unreadable.
+    """
     if not CORPUS_PATH.exists():
         return []
     try:
@@ -37,7 +49,15 @@ def load_corpus() -> list[dict]:
 
 
 def _build_index(corpus: list[dict]) -> tuple:
-    """Build (vectorizer, matrix) or (None, None) on failure."""
+    """Build (vectorizer, matrix) or (None, None) on failure.
+
+    Args:
+        corpus: Corpus entries used as the fitting documents.
+
+    Returns:
+        A ``(vectorizer, matrix)`` pair, or ``(None, None)`` when scikit-learn
+        is unavailable or fitting fails.
+    """
     try:
         from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
 
@@ -50,7 +70,15 @@ def _build_index(corpus: list[dict]) -> tuple:
 
 
 def _get_index(corpus: list[dict]) -> tuple:
-    """Return cached (vectorizer, matrix, corpus), rebuilding if needed."""
+    """Return cached (vectorizer, matrix, corpus), rebuilding if needed.
+
+    Args:
+        corpus: Corpus entries the cached index must correspond to.
+
+    Returns:
+        A ``(vectorizer, matrix, corpus)`` triple, refreshed whenever the
+        corpus file or its contents change.
+    """
     global _cached
     mtime = CORPUS_PATH.stat().st_mtime if CORPUS_PATH.exists() else None
     with _cache_lock:
@@ -70,7 +98,16 @@ def _get_index(corpus: list[dict]) -> tuple:
 
 
 def search(query: str, top_k: int = 5, event_type: str | None = None) -> list[dict]:
-    """Return top_k corpus entries most relevant to query. Each has 'score' in (0,1]."""
+    """Return top_k corpus entries most relevant to query. Each has 'score' in (0,1].
+
+    Args:
+        query: Free-text query to match against the corpus.
+        top_k: Maximum number of entries to return, clamped to 1..10.
+        event_type: Optional event type filter; entries tagged "all" always match.
+
+    Returns:
+        The most relevant corpus entries, each carrying a "score" key.
+    """
     corpus = load_corpus()
     if event_type:
         corpus = [c for c in corpus if c.get("event_type") in (event_type, "all")]
@@ -118,7 +155,11 @@ def search(query: str, top_k: int = 5, event_type: str | None = None) -> list[di
 
 
 def reset_cache() -> None:
-    """Reset the cached retrieval index."""
+    """Reset the cached retrieval index.
+
+    Returns:
+        None.
+    """
     global _cached
     with _cache_lock:
         _cached = {"corpus": None, "vectorizer": None, "matrix": None, "mtime": None}

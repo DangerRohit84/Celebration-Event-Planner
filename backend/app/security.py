@@ -21,7 +21,15 @@ ALLOWED_CONTENT_TYPES = {"application/pdf", "application/octet-stream"}
 
 
 def sanitize_text(value: object, max_len: int = 2000) -> str:
-    """Strip control chars and cap length."""
+    """Strip control chars and cap length.
+
+    Args:
+        value: Arbitrary input to clean; non-strings are coerced first.
+        max_len: Maximum number of characters kept in the result.
+
+    Returns:
+        The cleaned text, capped to ``max_len`` characters.
+    """
     if not isinstance(value, str):
         value = str(value)
     cleaned = "".join(
@@ -33,7 +41,15 @@ def sanitize_text(value: object, max_len: int = 2000) -> str:
 
 
 def sanitize_filename(raw: str) -> str:
-    """Basename only, traversal-safe, control-char stripped, length capped."""
+    """Basename only, traversal-safe, control-char stripped, length capped.
+
+    Args:
+        raw: Raw filename supplied by the client.
+
+    Returns:
+        A safe filename, falling back to "upload.pdf" when nothing survives
+        sanitization.
+    """
     name = Path(raw or "").name
     name = sanitize_text(name, 128)
     name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
@@ -41,7 +57,18 @@ def sanitize_filename(raw: str) -> str:
 
 
 def validate_pdf_magic(raw_bytes: bytes | bytearray) -> bool:
-    """Validate that bytes start with the PDF magic header."""
+    """Validate that bytes start with the PDF magic header.
+
+    Args:
+        raw_bytes: File bytes to inspect.
+
+    Returns:
+        True when the bytes carry the PDF magic header.
+
+    Raises:
+        TypeError: When the input is not a bytes-like object.
+        ValueError: When the bytes do not start with the PDF magic header.
+    """
     if not isinstance(raw_bytes, (bytes, bytearray)):
         raise TypeError("invalid pdf magic")
     if not bytes(raw_bytes).startswith(PDF_MAGIC):
@@ -50,11 +77,21 @@ def validate_pdf_magic(raw_bytes: bytes | bytearray) -> bool:
 
 
 def validate_pre_parse(*args: Any, **kwargs: Any) -> bool:
-    """Pre-parse guards. Single canonical style (legal):
-       validate_pre_parse(filename, content_type, size_bytes, data)
-    Also accepts legacy celebration style:
-       validate_pre_parse(data, filename, content_type)
-    Raises ValueError on failure.
+    """Validate an upload before parsing (single canonical style).
+
+    Canonical style: validate_pre_parse(filename, content_type, size_bytes, data).
+    Legacy celebration style: validate_pre_parse(data, filename, content_type).
+
+    Args:
+        *args: Positional arguments in either the canonical or legacy order.
+        **kwargs: Keyword fallbacks for filename, content_type, size, and data.
+
+    Returns:
+        True when the upload passes every pre-parse guard.
+
+    Raises:
+        ValueError: When the filename, size, content type, or magic bytes fail
+            validation.
     """
     # Resolve arguments (support both call styles).
     if len(args) == 4:
@@ -97,7 +134,14 @@ def validate_pre_parse(*args: Any, **kwargs: Any) -> bool:
 
 
 def sanitize_session_id(raw: object) -> str:
-    """Allowlist [A-Za-z0-9_-], max 64. Empty -> '' (no session)."""
+    """Allowlist [A-Za-z0-9_-], max 64. Empty -> '' (no session).
+
+    Args:
+        raw: Raw session identifier supplied by the client.
+
+    Returns:
+        The allowlisted session identifier, or an empty string when absent.
+    """
     if not raw:
         return ""
     if not isinstance(raw, str):

@@ -33,7 +33,17 @@ _RATE_BUCKETS = _rate_buckets
 
 
 def _rate_limit(request: Request) -> None:
-    """Apply per-IP rate limiting, raising 429 when exceeded."""
+    """Apply per-IP rate limiting, raising 429 when exceeded.
+
+    Args:
+        request: Incoming request whose client IP is used as the bucket key.
+
+    Returns:
+        None. Rate-limit metadata is stored on ``request.state``.
+
+    Raises:
+        HTTPException: With status 429 when the client exceeded its quota.
+    """
     ip = request.client.host if request.client else "unknown"
     now = time.time()
     window = 60.0
@@ -50,7 +60,18 @@ def _rate_limit(request: Request) -> None:
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next) -> Response:
-    """Attach security headers and rate-limit info to responses."""
+    """Attach security headers and rate-limit info to responses.
+
+    Args:
+        request: Incoming request being processed.
+        call_next: Downstream handler producing the response.
+
+    Returns:
+        The response with security and rate-limit headers attached.
+
+    Raises:
+        HTTPException: Never raised directly; the 429 response is returned.
+    """
     start = time.perf_counter()
     try:
         _rate_limit(request)
@@ -83,7 +104,18 @@ async def security_headers(request: Request, call_next) -> Response:
 
 
 def _attach_headers(resp, request, start, limited: bool = False) -> None:
-    """Attach security + rate-limit headers to a response."""
+    """Attach security + rate-limit headers to a response.
+
+    Args:
+        resp: Response whose headers are mutated in place.
+        request: Request supplying the rate-limit metadata.
+        start: Start timestamp used to compute the process-time header.
+        limited: When True, the response is flagged as rate limited and
+            remaining quota is reported as zero.
+
+    Returns:
+        None.
+    """
     elapsed = (time.perf_counter() - start) * 1000
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
