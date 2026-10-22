@@ -78,9 +78,6 @@ def search(query: str, top_k: int = 5, event_type: str | None = None) -> list[di
         return []
     top_k = max(1, min(top_k, 10))
 
-    _get_index(load_corpus())
-    # filter cached index to event_type subset
-    # Rebuild subset index lazily (small corpus) for correctness.
     try:
         from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
         from sklearn.metrics.pairwise import cosine_similarity  # type: ignore[import-untyped]

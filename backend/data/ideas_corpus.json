@@ -1,11 +1,57 @@
-﻿[
-  {"id": "w1", "event_type": "wedding", "text": "Outdoor garden ceremony with string lights and seasonal flowers for a romantic vibe."},
-  {"id": "w2", "event_type": "wedding", "text": "Buffet with live stations (pasta, chaat) keeps guests engaged and reduces per-plate cost."},
-  {"id": "w3", "event_type": "wedding", "text": "Photo booth with props and instant prints doubles as guest favor and entertainment."},
-  {"id": "b1", "event_type": "birthday", "text": "Themed dessert table with custom cake topper matching the party theme."},
-  {"id": "b2", "event_type": "birthday", "text": "Interactive games (trivia, karaoke) keep energy high for mixed-age groups."},
-  {"id": "c1", "event_type": "community", "text": "Potluck-style food with assigned dishes ensures variety and lowers catering cost."},
-  {"id": "c2", "event_type": "community", "text": "Volunteer-run registration desk and clear signage reduce bottlenecks at entry."},
-  {"id": "all1", "event_type": "all", "text": "Send digital invitations 6 weeks ahead with RSVP tracking and dietary capture."},
-  {"id": "all2", "event_type": "all", "text": "Create a day-of timeline shared with all vendors to keep everyone aligned."}
+[
+  {
+    "id": "w1",
+    "event_type": "wedding",
+    "text": "Outdoor garden ceremony with string lights and seasonal flowers for a romantic vibe."
+  },
+  {
+    "id": "w2",
+    "event_type": "wedding",
+    "text": "Buffet with live stations (pasta, chaat) keeps guests engaged and reduces per-plate cost."
+  },
+  {
+    "id": "w3",
+    "event_type": "wedding",
+    "text": "Photo booth with props and instant prints doubles as guest favor and entertainment."
+  },
+  {
+    "id": "b1",
+    "event_type": "birthday",
+    "text": "Themed dessert table with custom cake topper matching the party theme."
+  },
+  {
+    "id": "b2",
+    "event_type": "birthday",
+    "text": "Interactive games (trivia, karaoke) keep energy high for mixed-age groups."
+  },
+  {
+    "id": "c1",
+    "event_type": "community",
+    "text": "Potluck-style food with assigned dishes ensures variety and lowers catering cost."
+  },
+  {
+    "id": "c2",
+    "event_type": "community",
+    "text": "Volunteer-run registration desk and clear signage reduce bottlenecks at entry."
+  },
+  {
+    "id": "all1",
+    "event_type": "all",
+    "text": "Send digital invitations 6 weeks ahead with RSVP tracking and dietary capture."
+  },
+  {
+    "id": "all2",
+    "event_type": "all",
+    "text": "Create a day-of timeline shared with all vendors to keep everyone aligned."
+  },
+  {
+    "id": "corp1",
+    "event_type": "corporate",
+    "text": "corporate event agenda timeline speaker sessions and catering with dietary options for business guests"
+  },
+  {
+    "id": "corp2",
+    "event_type": "corporate",
+    "text": "branded swag booth registration desk and rsvp tracking for corporate attendees"
+  }
 ]
