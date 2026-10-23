@@ -1,6 +1,6 @@
 """Domain entities for the Celebration & Event Planner.
 
-Pure data classes (no I/O). Validation lives in Pydantic schemas in main.py.
+Pure data classes (no I/O). Validation lives in Pydantic schemas in schemas/.
 """
 
 from __future__ import annotations
@@ -88,18 +88,6 @@ class Vendor:
     cost_estimate: float = 0.0
     contact: str = ""
     notes: str = ""
-
-
-@dataclass
-class Guest:
-    """A guest invited to an event."""
-
-    id: str
-    event_id: str
-    name: str
-    rsvp: str = "pending"  # pending | yes | no | maybe
-    dietary: str = ""
-    plus_one: bool = False
 
 
 @dataclass

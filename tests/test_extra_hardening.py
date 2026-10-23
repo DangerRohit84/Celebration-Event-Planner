@@ -120,7 +120,7 @@ def test_unhandled_error_returns_500_with_security_headers(
     def boom():
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(routes_module, "get_store", boom)
+    monkeypatch.setattr(routes_module.export, "get_store", boom)
     r = client.post("/export", json={"event_id": "whatever"})
     assert r.status_code == 500
     assert r.json() == {"detail": "Internal server error"}

@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from backend.app import retrieval
+from backend.app import retrieval, retrieval_fallback
 from backend.app.retrieval import load_corpus, reset_cache, search
 
 
@@ -185,14 +185,14 @@ def test_fallback_path_returns_the_same_hit_counts_as_sklearn(monkeypatch):
     out-of-domain question.
     """
     pytest.importorskip("sklearn.feature_extraction.text")
-    monkeypatch.setattr(retrieval, "_stop_words_cache", None)
+    monkeypatch.setattr(retrieval_fallback, "_stop_words_cache", None)
     reset_cache()
     with_sklearn = {q: len(search(q, top_k=5)) for q in PROBE_QUERIES}
 
     # Simulate a deployment without scikit-learn.
     monkeypatch.setitem(sys.modules, "sklearn.feature_extraction.text", None)
     monkeypatch.setitem(sys.modules, "sklearn.metrics.pairwise", None)
-    monkeypatch.setattr(retrieval, "_stop_words_cache", None)
+    monkeypatch.setattr(retrieval_fallback, "_stop_words_cache", None)
     reset_cache()
     without_sklearn = {q: len(search(q, top_k=5)) for q in PROBE_QUERIES}
 

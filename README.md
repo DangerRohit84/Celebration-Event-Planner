@@ -96,27 +96,45 @@ The full contract is published at `/openapi.json`.
 
 ```
 backend/app/
-  config.py      env settings (no secrets in code)
-  security.py    PDF validation + sanitization (magic pre-parse, control-char strip)
-  models.py      Event / BudgetLine / TimelineMilestone / Vendor / Guest / Chunk entities
-  planner.py     budget breakdown + timeline + vendor checklist (pure, deterministic)
-  retrieval.py   cached TF-IDF search with cosine scores + token-overlap fallback
-  prompting.py   grounded prompt + plain-language rule + score-calibrated confidence
-  ingest.py      PDF parsing (pypdf) + section-aware chunking + document store
-  storage.py     repository pattern: SQLite (default, persistent) | InMemory (tests)
-  schemas.py     Pydantic request/response models (the exact wire format)
-  serializers.py pure domain -> JSON serializers (citations, ideas, budget, timeline, vendors)
-  routes.py      HTTP adapters: parse -> domain -> serializer
-  main.py        FastAPI app + rate limit + security headers (211 lines, no business logic)
-  llm/           base.py (DIP port) + factory.py (OCP) + echo / gemini.py / openai_compat.py
+  config.py             env settings (no secrets in code)
+  security.py           text/filename sanitization (control-char strip, traversal-safe)
+  upload_guard.py       pre-parse upload guards (PDF magic, content-type, size caps)
+  models.py             Event / BudgetLine / TimelineMilestone / Vendor / Chunk entities
+  planner.py            budget breakdown + timeline + vendor checklist (pure, deterministic)
+  planner_templates.py  allocation tables: budget splits, vendor categories, milestone offsets
+  retrieval.py          cached TF-IDF search with cosine scores + token-overlap fallback
+  retrieval_index.py    the cached corpus index (fitted once; a request only transforms)
+  retrieval_fallback.py zero-dependency fallback: stop words + token-overlap ranking
+  prompting.py          grounded prompt builders (Rules 1-3) + shared re-exports
+  prompt_constants.py   the exact strings: disclaimer, refusal, headers, numbered rules
+  prompt_rendering.py   deterministic grounded + plain-language rendering
+  prompt_confidence.py  score-calibrated confidence (Grounded / Partial / Cannot Determine)
+  ingest.py             PDF parsing (pypdf) + chunk relevance scoring
+  chunking.py           section-aware chunking (headings, sentence splits, 800-char cap)
+  docstore.py           bounded document store (MAX_DOCUMENTS, 429 when full)
+  storage/              repository pattern: protocol.py (port), store.py (factory),
+                        memory.py + memory_records.py (tests), sqlite_store.py +
+                        sqlite_base.py + sqlite_events.py + sqlite_budget.py +
+                        sqlite_vendors.py (default, persistent)
+  schemas/              Pydantic request/response models: requests.py (inputs),
+                        events.py (event wire format), answers.py (ideas/export/upload)
+  serializers.py        pure domain -> JSON serializers (re-export hub)
+  event_serializers.py  event/budget/timeline/vendor projections
+  answer_serializers.py citations + idea strings
+  export_serializers.py the exportable event plan
+  routes/               HTTP adapters: parse -> domain -> serializer
+                        events.py, event_updates.py, ideas.py, uploads.py, export.py,
+                        answering.py (shared answer flow), system.py, deps.py
+  main.py               FastAPI app + rate limit + security headers (211 lines, no business logic)
+  llm/                  base.py (DIP port) + factory.py (OCP) + echo / gemini.py / openai_compat.py
 frontend/        accessible static UI (skip link, landmarks, ARIA-live + role=alert errors,
-                 AA contrast, 44px targets, noscript)
+                 AA contrast, 44px targets, noscript, document upload card)
 scripts/
   check_quality.py  runs ruff + mypy + pytest --cov and enforces the gates
 pyproject.toml   ruff / mypy / pytest / coverage configuration (the enforced gates)
 tests/           pytest per module + hardening + MAX-score + accessibility/efficiency/
                  alignment/security-extra/code-quality + ingest/plain-language/
-                 llm-providers/quality-gates/docs-claims (212 green)
+                 llm-providers/quality-gates/docs-claims (219 green)
 docs/            VIDEO_SCRIPT, DEPLOYMENT, NARRATIVE
 Dockerfile       Cloud Run ready (PORT env, stateless, non-root + HEALTHCHECK)
 ```
@@ -148,11 +166,11 @@ Dockerfile       Cloud Run ready (PORT env, stateless, non-root + HEALTHCHECK)
 ## Tests
 
 ```bash
-pytest tests/ -v                   # 212 tests
+pytest tests/ -v                   # 219 tests
 python scripts/check_quality.py    # the enforced gate: ruff + mypy + pytest --cov
 ```
 
-**212 tests** across 21 modules:
+**219 tests** across 21 modules:
 
 | Module | Covers |
 |---|---|
@@ -180,7 +198,7 @@ python scripts/check_quality.py    # the enforced gate: ruff + mypy + pytest --c
 
 **Enforced gates** (`pyproject.toml` + `scripts/check_quality.py`, all three must pass):
 `ruff check backend tests` → 0 errors; `mypy backend/app` → 0 errors;
-`pytest --cov=backend` → all green **and** `TOTAL >= 76%` (measured: **85%**).
+`pytest --cov=backend` → all green **and** `TOTAL >= 76%` (measured: **89%**).
 
 ## Assumptions (demo scope, by design)
 
@@ -227,11 +245,11 @@ gcloud run deploy celebration-event-planner --source . --port 8080 --allow-unaut
 
 | Criterion (impact) | Where it is proven |
 |---|---|
-| Code Quality (HIGH) | SOLID: SRP small focused modules (`planner/retrieval/prompting/ingest/security/storage/config` each focused, one reason to change), DIP `LLMProvider` port + factory OCP, Strategy retrieval; module docstrings state responsibility; `backend/app/main.py` adapter-only (routing/validation/rate-limit/security headers, 211 lines, no pypdf/sklearn); `llm/echo` deterministic, no TODO/FIXME/HACK, no `print()`, no hardcoded secrets (env-only); 212 pytest green; `tests/test_code_quality.py` enforces docstrings/SRP/no-secrets/determinism |
+| Code Quality (HIGH) | SOLID: SRP small focused modules (`planner/retrieval/prompting/ingest/security/storage/config` each focused, one reason to change), DIP `LLMProvider` port + factory OCP, Strategy retrieval; module docstrings state responsibility; `backend/app/main.py` adapter-only (routing/validation/rate-limit/security headers, 211 lines, no pypdf/sklearn); `llm/echo` deterministic, no TODO/FIXME/HACK, no `print()`, no hardcoded secrets (env-only); 219 pytest green; `tests/test_code_quality.py` enforces docstrings/SRP/no-secrets/determinism |
 | Alignment (HIGH) | Grounded ideas cite source ids; exact Cannot Determine + hard override on zero hits; score-calibrated confidence (`Grounded/Partial/Cannot Determine`); disclaimer on every surface (banner + `/ideas` + `/export` + prompt Rule 3); plain-language toggle (checkbox → request flag → prompt rule → shorter answer, same citations); uploaded-PDF context feeds the same prompt; auto budget/timeline/vendor structure; `tests/test_alignment.py` pins surfaces |
 | Security (MEDIUM) | Magic + guards pre-parse (bounded `MAX+1` read, 400 not OOM), basename filename sanitization (traversal-safe) + `sanitize_text` control-char strip, Pydantic bounds (`guest_count 0..100000`, `top_k 1..10` → 422), no secrets (env-only keys, `.env` never committed), allowlist CORS (never `*`), headers (nosniff/DENY/no-referrer/CSP + HSTS + Permissions-Policy + `no-store` + `X-Process-Time`) + `X-RateLimit-*`/`Retry-After` + 429 path tested, full-entropy event id (32 hex), sliding-window rate limit (`RATE_LIMIT_PER_MIN`), bounded store (`MAX_STORE_EVENTS`, 429 when full), safe errors (no Traceback), non-root Docker + HEALTHCHECK; fake-data-only demo banner; `tests/test_hardening.py` + `tests/test_security.py` + `tests/test_extra_hardening.py` + `tests/test_boundaries.py` |
 | Efficiency (MEDIUM) | ≤ 9 budget categories, 9 milestones, ≤ 10 vendors, top_k clamp 1..10, TF-IDF no-download + fallback with cosine scores, cached corpus index (one fit, query transform only — asserted by a test that counts vectorizer constructions), bounded upload read + `X-Process-Time` transparency, sub-second API; `tests/test_efficiency.py` pins caps/timing/429/headers |
-| Testing (LOW) | `pytest tests/ -v` → 212 green (core + hardening + MAX-score + accessibility/efficiency/alignment/security-extra/code-quality + boundaries + frontend-a11y + ingest + plain-language + llm-providers + quality-gates + docs-claims), enforced `ruff`/`mypy`/`pytest --cov` gates with `TOTAL >= 76%` (measured 85%), regression tests for magic/bounds/headers/rate-limit/traversal/process-time/role=alert/no-secrets/SRP |
+| Testing (LOW) | `pytest tests/ -v` → 219 green (core + hardening + MAX-score + accessibility/efficiency/alignment/security-extra/code-quality + boundaries + frontend-a11y + ingest + plain-language + llm-providers + quality-gates + docs-claims), enforced `ruff`/`mypy`/`pytest --cov` gates with `TOTAL >= 76%` (measured 89%), regression tests for magic/bounds/headers/rate-limit/traversal/process-time/role=alert/no-secrets/SRP |
 | Accessibility (LOW) | Skip link, landmarks (`header/main/footer`), `<label for>` + `aria-describedby`, `role=alert` error region (no blocking `alert()`), `role=status` answers, focus-visible + focus management, ARIA-live, plain-language toggle, `prefers-reduced-motion`, AA contrast (all ≥ 4.5:1), 44px touch targets, `noscript` fallback, `textContent`-only DOM writes, keyboard-only walkthrough; `tests/test_accessibility.py` + `tests/test_frontend_a11y.py` parse HTML/CSS/JS |
 
 ## Submission checklist

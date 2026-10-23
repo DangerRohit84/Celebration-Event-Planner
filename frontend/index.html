@@ -85,7 +85,7 @@
         </div>
       </form>
       <div id="status" role="status" aria-live="polite" tabindex="0" class="status"></div>
-      <div id="errors" role="alert" aria-live="assertive" class="errors"></div>
+      <div id="errors" role="alert" aria-live="assertive" tabindex="-1" class="errors"></div>
     </section>
 
     <section class="card" aria-labelledby="ideas-heading">
@@ -111,6 +111,22 @@
       <div id="answer" role="status" aria-live="polite" tabindex="-1" class="answer"></div>
       <div id="answerMode" class="hint" aria-live="polite"></div>
       <div id="citations" role="status" aria-live="polite" class="citations"></div>
+    </section>
+
+    <section class="card" aria-labelledby="upload-heading">
+      <div class="card-head">
+        <h2 id="upload-heading">Upload a Document</h2>
+        <p class="card-sub">Add a PDF (contract, venue quote) for extra grounded context.</p>
+      </div>
+      <div class="ask-row">
+        <div class="field field-grow">
+          <label for="docfile">PDF document</label>
+          <input id="docfile" name="docfile" type="file" accept=".pdf,application/pdf" aria-describedby="docfileHint" />
+          <span id="docfileHint" class="hint">PDF only, up to 10 MB.</span>
+        </div>
+        <button type="button" id="uploadBtn" class="btn btn-primary">Upload</button>
+      </div>
+      <div id="uploadStatus" role="status" aria-live="polite" class="status"></div>
     </section>
   </main>
   <footer role="contentinfo" class="site-footer">

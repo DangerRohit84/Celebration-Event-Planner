@@ -222,6 +222,9 @@ def test_client_keeps_existing_dom_ids() -> None:
         "exportBtn",
         "q",
         "plain",
+        "docfile",
+        "uploadBtn",
+        "uploadStatus",
     ):
         assert element_id in JS, f"app.js no longer references #{element_id}"
 
@@ -271,3 +274,59 @@ def test_skip_link_and_landmarks_survive() -> None:
     assert 'role="main"' in HTML
     assert 'role="contentinfo"' in HTML
     assert "<noscript>" in HTML
+
+
+def test_upload_card_has_a_labelled_file_input() -> None:
+    """The upload card must have a file input bound to a real label."""
+    file_inputs = [
+        (element_id, attributes)
+        for tag, element_id, attributes in DOM.controls
+        if tag == "input" and attributes.get("type") == "file"
+    ]
+    assert file_inputs, "no file input found in frontend/index.html"
+    element_id, attributes = file_inputs[0]
+    assert element_id == "docfile"
+    assert element_id in DOM.labels, "the file input has no <label for>"
+    assert (attributes.get("aria-describedby") or "").strip()
+    assert attributes.get("accept") == ".pdf,application/pdf"
+
+
+def test_file_input_is_keyboard_operable() -> None:
+    """The file input must be present and not disabled."""
+    attributes = {
+        element_id: attrs
+        for tag, element_id, attrs in DOM.controls
+        if tag == "input" and attrs.get("type") == "file"
+    }
+    assert "docfile" in attributes
+    assert "disabled" not in attributes["docfile"]
+
+
+def test_upload_button_is_named_and_wired() -> None:
+    """The upload button must exist with an accessible name."""
+    assert 'id="uploadBtn"' in HTML
+    assert ">Upload</button>" in HTML
+    assert "getElementById('uploadBtn')" in JS
+
+
+def test_upload_handler_posts_the_file_to_the_upload_endpoint() -> None:
+    """The client must POST the chosen file to /upload as multipart."""
+    code = _strip_comments(JS)
+    assert "fetch('/upload', { method: 'POST', body })" in code
+    assert "new FormData()" in code
+    assert "Upload failed: ' + res.status" in code
+
+
+def test_upload_result_is_announced_in_a_dedicated_region() -> None:
+    """Upload feedback must go to its own polite live region."""
+    assert 'id="uploadStatus"' in HTML
+    assert 'role="status"' in HTML
+    assert "getElementById('uploadStatus')" in JS
+
+
+def test_error_region_is_focusable() -> None:
+    """#errors must be focusable so the client can move focus to it."""
+    opening_tag = re.search(r'<div id="errors"[^>]*>', HTML)
+    assert opening_tag, "errors region missing from frontend/index.html"
+    assert 'tabindex="-1"' in opening_tag.group(0)
+    assert "setAttribute('tabindex', '-1')" in JS

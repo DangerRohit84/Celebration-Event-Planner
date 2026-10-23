@@ -6,6 +6,10 @@
 const form = document.getElementById('create-form');
 const statusEl = document.getElementById('status');
 const errorEl = document.getElementById('errors');
+// Belt and braces: the markup already carries tabindex="-1" on #errors, but
+// focus() only works on a focusable element, so set it here too in case the
+// attribute is ever dropped from the template.
+errorEl?.setAttribute('tabindex', '-1');
 
 let lastEventId = null;
 
@@ -140,5 +144,35 @@ document.getElementById('exportBtn')?.addEventListener('click', async () => {
     errorEl.focus();
   } finally {
     setLoading(exportBtn, false);
+  }
+});
+
+// Upload a PDF document (contract, venue quote) for extra grounded context.
+// The FormData body is passed without a Content-Type header so the browser
+// sets the multipart boundary itself.
+document.getElementById('uploadBtn')?.addEventListener('click', async () => {
+  const uploadBtn = document.getElementById('uploadBtn');
+  const fileInput = document.getElementById('docfile');
+  const uploadStatusEl = document.getElementById('uploadStatus');
+  errorEl.textContent = '';
+  if (!uploadStatusEl) return;
+  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+    uploadStatusEl.textContent = 'Choose a PDF file first.';
+    return;
+  }
+  const body = new FormData();
+  body.append('file', fileInput.files[0]);
+  setLoading(uploadBtn, true);
+  try {
+    const res = await fetch('/upload', { method: 'POST', body });
+    if (!res.ok) throw new Error('Upload failed: ' + res.status);
+    const json = await res.json();
+    uploadStatusEl.textContent = 'Uploaded ' + json.filename + ' ('
+      + json.pages + ' pages, ' + json.chunks + ' chunks).';
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.focus();
+  } finally {
+    setLoading(uploadBtn, false);
   }
 });

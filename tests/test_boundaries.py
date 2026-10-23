@@ -189,7 +189,7 @@ def test_provider_factory_failure_degrades_gracefully(
     def boom(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("no provider available")
 
-    monkeypatch.setattr("backend.app.routes.build_provider", boom)
+    monkeypatch.setattr("backend.app.routes.answering.build_provider", boom)
     eid = _create(client)
     r = client.post("/ideas", json={"event_id": eid, "query": "outdoor ceremony"})
     assert r.status_code in (200, 503)

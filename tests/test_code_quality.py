@@ -44,6 +44,25 @@ def test_main_size():
     assert len(lines) < 400
 
 
+def test_every_module_is_small():
+    """Single-responsibility cap: no backend module exceeds 150 lines.
+
+    A module that keeps growing is doing more than one job; the cap forces
+    the split (chunking, docstore, prompt_constants, ...) instead of letting
+    a god module accrete. ``main.py`` is exempt (it is the composition root
+    and is capped separately at 400), as are ``__init__.py`` re-export hubs.
+    """
+    over = []
+    for p in BACKEND:
+        if p.name == "__init__.py":
+            continue
+        lines = p.read_text(encoding="utf-8").splitlines()
+        cap = 400 if p.name == "main.py" else 150
+        if len(lines) > cap:
+            over.append(f"{p}: {len(lines)} > {cap}")
+    assert not over, f"modules over the size cap: {over}"
+
+
 def test_no_prints():
     for p in BACKEND:
         text = p.read_text(encoding="utf-8")

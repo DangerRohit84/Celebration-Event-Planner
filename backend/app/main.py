@@ -1,8 +1,8 @@
 """FastAPI application: adapters + validation + rate limit + security headers.
 
 Adapter-only: no business logic beyond wiring. Business logic lives in
-planner.py / retrieval.py / prompting.py / storage.py, and the response
-payloads are built by serializers.py.
+planner.py / retrieval.py / prompting.py / the storage package, and the
+response payloads are built by serializers.py.
 """
 
 from __future__ import annotations

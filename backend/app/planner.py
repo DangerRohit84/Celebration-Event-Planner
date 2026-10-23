@@ -2,6 +2,10 @@
 
 Pure functions (no I/O, no LLM). Deterministic given inputs.
 LLM is used only for personalized ideas (see prompting.py).
+
+The allocation tables, vendor categories, and milestone offsets live in
+:mod:`backend.app.planner_templates` and are re-exported here so the
+historical import path keeps working.
 """
 
 from __future__ import annotations
@@ -9,106 +13,10 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from .models import BudgetLine, Event, TimelineMilestone, Vendor
+from .planner_templates import BUDGET_TEMPLATES as BUDGET_TEMPLATES
+from .planner_templates import MILESTONE_OFFSETS as MILESTONE_OFFSETS
+from .planner_templates import VENDOR_CATEGORIES as VENDOR_CATEGORIES
 from .storage import new_id
-
-# Default budget allocation percentages by event type.
-BUDGET_TEMPLATES: dict[str, list[tuple[str, float]]] = {
-    "wedding": [
-        ("venue", 0.30),
-        ("catering", 0.25),
-        ("decor", 0.12),
-        ("photography", 0.10),
-        ("attire", 0.08),
-        ("music", 0.06),
-        ("invitations", 0.03),
-        ("transport", 0.03),
-        ("contingency", 0.03),
-    ],
-    "birthday": [
-        ("venue", 0.20),
-        ("catering", 0.30),
-        ("decor", 0.15),
-        ("cake", 0.10),
-        ("entertainment", 0.12),
-        ("invitations", 0.05),
-        ("gifts", 0.05),
-        ("contingency", 0.03),
-    ],
-    "community": [
-        ("venue", 0.25),
-        ("catering", 0.20),
-        ("decor", 0.10),
-        ("sound_av", 0.12),
-        ("permits", 0.08),
-        ("marketing", 0.08),
-        ("volunteers", 0.05),
-        ("contingency", 0.12),
-    ],
-    "corporate": [
-        ("venue", 0.25),
-        ("catering", 0.20),
-        ("av", 0.15),
-        ("decor", 0.08),
-        ("speakers", 0.12),
-        ("marketing", 0.08),
-        ("swag", 0.07),
-        ("contingency", 0.05),
-    ],
-    "other": [
-        ("venue", 0.30),
-        ("catering", 0.25),
-        ("decor", 0.15),
-        ("misc", 0.20),
-        ("contingency", 0.10),
-    ],
-}
-
-VENDOR_CATEGORIES: dict[str, list[str]] = {
-    "wedding": [
-        "venue",
-        "caterer",
-        "decorator",
-        "photographer",
-        "videographer",
-        "dj_band",
-        "florist",
-        "makeup",
-        "transport",
-        "cake",
-    ],
-    "birthday": [
-        "venue",
-        "caterer",
-        "decorator",
-        "entertainer",
-        "cake",
-        "photographer",
-    ],
-    "community": ["venue", "caterer", "sound_av", "permits", "marketing", "volunteers"],
-    "corporate": [
-        "venue",
-        "caterer",
-        "av",
-        "decorator",
-        "speakers",
-        "marketing",
-        "swag",
-    ],
-    "other": ["venue", "caterer", "decorator"],
-}
-
-# Milestone offsets (days before event) -> title
-MILESTONE_OFFSETS: list[tuple[int, str]] = [
-    (180, "Set budget and guest list"),
-    (120, "Book venue"),
-    (90, "Book caterer and key vendors"),
-    (60, "Send invitations"),
-    (30, "Finalize menu and decor"),
-    (14, "Confirm RSVPs and headcount"),
-    (7, "Final vendor confirmations"),
-    (1, "Day-before checklist"),
-    (0, "Event day"),
-]
 
 
 def budget_breakdown(event: Event) -> list[BudgetLine]:

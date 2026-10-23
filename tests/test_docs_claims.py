@@ -224,7 +224,9 @@ def test_plain_language_toggle_is_documented_and_real() -> None:
     assert "plain-language toggle" in readme
     assert "plain_language" in readme
     assert 'id="plain"' in (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
-    schemas = (ROOT / "backend" / "app" / "schemas.py").read_text(encoding="utf-8")
+    schemas = (ROOT / "backend" / "app" / "schemas" / "requests.py").read_text(
+        encoding="utf-8",
+    )
     assert "plain_language" in schemas
 
 
