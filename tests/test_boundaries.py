@@ -326,18 +326,59 @@ def test_rate_bucket_store_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
         main_module._rate_buckets.clear()
 
 
+class _FakeClock:
+    """Deterministic stand-in for the ``time`` module the limiter reads."""
+
+    def __init__(self, start: float) -> None:
+        """Start the fake clock at a fixed epoch.
+
+        Args:
+            start: The value ``time()`` and ``perf_counter()`` return.
+        """
+        self.now = start
+
+    def time(self) -> float:
+        """Return the current fake wall-clock time.
+
+        Returns:
+            The frozen/advanced ``now`` value.
+        """
+        return self.now
+
+    def perf_counter(self) -> float:
+        """Return the current fake monotonic time.
+
+        Returns:
+            The same ``now`` value, keeping elapsed-time math consistent.
+        """
+        return self.now
+
+
 def test_rate_bucket_window_is_sliding(
     client: TestClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Timestamps older than the window are dropped from the bucket."""
+    """Timestamps older than the window are dropped from the bucket.
+
+    The limiter's clock is replaced with a fake the test advances stepwise,
+    so window expiry is asserted exactly instead of depending on wall-clock
+    timing (which made the burst-index assertions flaky on slow machines).
+    """
+    clock = _FakeClock(start=1_000_000.0)
+    monkeypatch.setattr(main_module, "time", clock)
     monkeypatch.setattr(settings, "rate_limit_per_min", 5)
     main_module._rate_buckets.clear()
     bucket = main_module._rate_buckets["testclient"] = []
-    bucket.extend([time.time() - 3600, time.time() - 120])
+    bucket.extend([clock.now - 3600, clock.now - 120])
     client.get("/health")
     remaining = main_module._rate_buckets["testclient"]
     assert len(remaining) == 1
-    assert remaining[0] > time.time() - 60
+    assert remaining[0] == clock.now
+    # Step the clock past the window: the recorded timestamp must expire.
+    clock.now += 61.0
+    client.get("/health")
+    remaining = main_module._rate_buckets["testclient"]
+    assert len(remaining) == 1
+    assert remaining[0] == clock.now
 
 
 # --- header coverage ------------------------------------------------------

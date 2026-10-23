@@ -260,7 +260,9 @@
      --border #E7E0D8 is decorative only (card edges, rules) and is therefore
      exempt from 1.4.11.
 
-   Touch targets: every button, input, and select is at least 44x44 CSS px
+   Touch targets: buttons and text inputs are at least 44x44 CSS px; the
+   plain-language checkbox is a 20px native control whose composite click
+   target (checkbox + padded label) is at least 44px
    (WCAG 2.5.5 AAA / 2.5.8 AA), see the min-height/min-width rules below.
    --------------------------------------------------------------------------- */
 :root {
@@ -532,14 +534,27 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 }
 .ask-row .field { flex: 1 1 320px; }
 .field-plain { flex: 0 1 240px; gap: 2px; }
-.plain-toggle { display: flex; align-items: center; gap: 10px; }
+.plain-toggle { display: flex; align-items: center; gap: 0; }
+/* Native checkbox at its natural 20px size: the padded <label> next to it is
+   the 44px touch target, so the control itself must not inherit the global
+   input sizing (44px box + border) that renders it as a huge bordered square. */
 .plain-toggle input[type="checkbox"] {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 10px;
+  width: 20px;
+  height: 20px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  flex-shrink: 0;
   accent-color: var(--primary);
+  cursor: pointer;
+}
+.plain-toggle label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 10px;
   cursor: pointer;
 }
 

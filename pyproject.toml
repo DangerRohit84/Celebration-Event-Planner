@@ -26,7 +26,14 @@ requires-python = ">=3.10"
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config"
 python_files = ["test_*.py"]
-filterwarnings = ["error::DeprecationWarning:backend.*"]
+# The first entry keeps deprecations raised inside backend code fatal. The
+# second targets exactly one third-party warning - starlette's TestClient
+# httpx deprecation (StarletteDeprecationWarning, a UserWarning subclass) -
+# by message and class; no blanket Deprecation/Warning suppression.
+filterwarnings = [
+    "error::DeprecationWarning:backend.*",
+    'ignore:Using `httpx` with `starlette\.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning',
+]
 
 # --------------------------------------------------------------------------
 # coverage - the enforced floor quoted in README.md
